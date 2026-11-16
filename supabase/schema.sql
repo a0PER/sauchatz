@@ -306,6 +306,15 @@ create policy "unblock someone" on public.blocks
 create policy "file a report" on public.reports
   for insert to authenticated with check (reporter_id = auth.uid());
 
+-- Explicit table permissions for signed-in users (newer Supabase projects
+-- do not always grant these automatically). Row level security above still
+-- decides which rows each person can see or change.
+grant usage on schema public to authenticated;
+grant select on all tables in schema public to authenticated;
+grant insert on public.profile_photos, public.messages, public.blocks, public.reports to authenticated;
+grant update, delete on public.profile_photos to authenticated;
+grant delete on public.blocks to authenticated;
+
 -- ---------------------------------------------------------------------
 -- 5. Functions the app calls (supabase.rpc)
 -- ---------------------------------------------------------------------
