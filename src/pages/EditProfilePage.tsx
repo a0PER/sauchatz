@@ -357,7 +357,7 @@ export default function EditProfilePage() {
                 <div className="text-sm text-ink">Public profile</div>
                 <p className="mt-0.5 text-[13px] text-muted">
                   {isPublic
-                    ? 'Everyone on Sauchatz can find you in People and see your full profile.'
+                    ? 'Everyone on SAUchatz can find you in People and see your full profile.'
                     : 'You are hidden from People and search. Only people you already chat with can see your photos and details.'}
                 </p>
               </div>

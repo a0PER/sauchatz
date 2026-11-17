@@ -48,7 +48,7 @@ export function ChooseNameDialog() {
     const clean = name.trim();
     if (!clean || needsRealName(clean, email)) return setError('Please enter your name, not your phone number.');
     if (!birth) return setError('Please enter your birthday.');
-    if (!isAdult(birth)) return setError('You must be 18 or older to use Sauchatz.');
+    if (!isAdult(birth)) return setError('You must be 18 or older to use SAUchatz.');
     setBusy(true);
     setError('');
     try {

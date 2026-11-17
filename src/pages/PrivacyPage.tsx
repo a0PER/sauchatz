@@ -5,7 +5,7 @@ import { Logo } from '../components/ui';
 
 const SECTIONS: { title: string; body: string[] }[] = [
   {
-    title: 'Who can use Sauchatz',
+    title: 'Who can use SAUchatz',
     body: [
       `${APP_NAME} is for current Southern Adventist University students who are 18 or older.`,
       `${APP_NAME} is an independent student project. It is not affiliated with, endorsed by, or run by Southern Adventist University.`,

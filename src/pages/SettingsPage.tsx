@@ -262,7 +262,7 @@ function ProfileSection() {
 
   return (
     <>
-      <Card title="Your profile" description={profile.is_public ? "Public: everyone on Sauchatz can find you and see your profile." : "Private: only people you chat with can see your photos and details."}>
+      <Card title="Your profile" description={profile.is_public ? "Public: everyone on SAUchatz can find you and see your profile." : "Private: only people you chat with can see your photos and details."}>
         <Link to={`/u/${userId}`} className="-mx-2 flex items-center gap-4 rounded-xl px-2 py-2 hover:bg-surface-2">
           <Avatar src={profile.avatar_url} name={profile.display_name} seed={userId} size={52} />
           <div className="min-w-0 flex-1">

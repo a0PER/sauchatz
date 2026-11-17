@@ -328,13 +328,14 @@ export function Menu({
 
 export function Logo({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="8" className="fill-accent" />
-      <path
-        d="M9 10.5A2.5 2.5 0 0 1 11.5 8h9A2.5 2.5 0 0 1 23 10.5v6a2.5 2.5 0 0 1-2.5 2.5H15l-4 3.5V19h.5A2.5 2.5 0 0 1 9 16.5z"
-        className="fill-on-accent"
-      />
-    </svg>
+    <img
+      src={`${import.meta.env.BASE_URL}icon-192.png`}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden="true"
+      className="shrink-0 rounded-[22%]"
+    />
   );
 }
 

@@ -87,7 +87,7 @@ export function ReportDialog({ open, onClose, userId, userName, messageId }: {
       }
     >
       <p className="mb-4 text-sm text-muted">
-        Reports go to the Sauchatz admin{messageId ? ', together with the reported message' : ''}. {userName} will not be told who reported them.
+        Reports go to the SAUchatz admin{messageId ? ', together with the reported message' : ''}. {userName} will not be told who reported them.
       </p>
       <Field label="What is wrong?">
         <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} placeholder="Spam, harassment, inappropriate photos..." />
