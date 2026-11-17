@@ -15,6 +15,9 @@ import SettingsPage from './pages/SettingsPage';
 import EditProfilePage from './pages/EditProfilePage';
 import AdminPage from './pages/AdminPage';
 import PrivacyPage from './pages/PrivacyPage';
+import JoinPage, { JoinSignedOut, takePendingInvite } from './pages/JoinPage';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function Splash() {
   return (
@@ -39,6 +42,16 @@ function ProfileMissing() {
   );
 }
 
+/** After signing in, continue to a group invite that was opened while signed out. */
+function PendingInviteRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const code = takePendingInvite();
+    if (code) navigate(`/join/${code}`, { replace: true });
+  }, [navigate]);
+  return null;
+}
+
 function Gate() {
   const { session, profile, loading, recoveryMode } = useAuth();
 
@@ -53,6 +66,7 @@ function Gate() {
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/forgot" element={<ForgotPasswordPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/join/:code" element={<JoinSignedOut />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -62,6 +76,7 @@ function Gate() {
 
   return (
     <PresenceProvider>
+      <PendingInviteRedirect />
       <ChatProvider>
         <Routes>
           <Route path="privacy" element={<PrivacyPage />} />
@@ -73,6 +88,7 @@ function Gate() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile/edit" element={<EditProfilePage />} />
             <Route path="admin" element={<AdminPage />} />
+            <Route path="join/:code" element={<JoinPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

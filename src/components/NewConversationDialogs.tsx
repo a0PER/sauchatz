@@ -11,7 +11,7 @@ import type { Profile } from '../lib/types';
 import { Avatar, Button, Field, Input, Modal, Spinner, Textarea, cx } from './ui';
 
 /** Searchable list of everyone, used by every "pick people" dialog. */
-function usePeopleSearch(term: string, exclude: string[]) {
+function usePeopleSearch(term: string, exclude: string[], includeContacts = false) {
   const [people, setPeople] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const excludeKey = exclude.join(',');
@@ -23,9 +23,14 @@ function usePeopleSearch(term: string, exclude: string[]) {
       const clean = term.trim().replace(/[%_,()]/g, '');
       if (clean) query = query.ilike('display_name', `%${clean}%`);
       if (excludeKey) query = query.not('id', 'in', `(${excludeKey})`);
-      const { data } = await query;
+      const [{ data }, contacts] = await Promise.all([
+        query,
+        includeContacts ? supabase.rpc('my_private_contacts', { p_term: clean }) : Promise.resolve({ data: [] }),
+      ]);
       if (!cancelled) {
-        setPeople((data as Profile[]) ?? []);
+        const skip = new Set(excludeKey ? excludeKey.split(',') : []);
+        const priv = ((contacts.data as Profile[] | null) ?? []).filter((p) => !skip.has(p.id));
+        setPeople([...priv, ...((data as Profile[]) ?? [])]);
         setLoading(false);
       }
     }, 150);
@@ -33,7 +38,7 @@ function usePeopleSearch(term: string, exclude: string[]) {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [term, excludeKey]);
+  }, [term, excludeKey, includeContacts]);
   return { people, loading };
 }
 
@@ -57,8 +62,11 @@ function PersonRow({ p, onClick, selected, disabled }: { p: Profile; onClick: ()
     >
       <Avatar src={p.avatar_url} name={p.display_name} seed={p.id} size={38} presence={presenceOf(p.id, p.status)} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-ink">{p.display_name}</div>
-        <div className="truncate text-xs text-muted">{p.description || 'No description yet'}</div>
+        <div className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
+          {p.display_name}
+          {!p.is_public && <span className="rounded bg-surface-2 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-muted">Private</span>}
+        </div>
+        <div className="truncate text-xs text-muted">{!p.is_public ? 'Private profile · you have chatted before' : p.description || 'No description yet'}</div>
       </div>
       {selected !== undefined && (
         <span
@@ -111,7 +119,7 @@ export function NewChatDialog({ open, onClose }: { open: boolean; onClose: () =>
 
 export function PeoplePicker({ selected, onChange, exclude }: { selected: Profile[]; onChange: (p: Profile[]) => void; exclude: string[] }) {
   const [term, setTerm] = useState('');
-  const { people, loading } = usePeopleSearch(term, exclude);
+  const { people, loading } = usePeopleSearch(term, exclude, true);
   const ids = new Set(selected.map((p) => p.id));
   const toggle = (p: Profile) => onChange(ids.has(p.id) ? selected.filter((x) => x.id !== p.id) : [...selected, p]);
 

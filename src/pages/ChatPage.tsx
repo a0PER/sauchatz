@@ -534,17 +534,7 @@ function ChatRoom() {
 }
 
 function ConversationIntro({ conv, title, other }: { conv: Conversation; title: string; other?: Member }) {
-  if (conv.type === 'group') {
-    return (
-      <div className="px-5 pb-2 pt-8">
-        <Avatar src={conv.avatar_url} name={conv.name} seed={conv.id} size={56} square />
-        <h2 className="mt-3 text-lg font-semibold text-ink">{title}</h2>
-        <p className="mt-1 text-sm text-muted">
-          {conv.description || 'This is the beginning of the group.'} Created {formatDayDivider(conv.created_at).toLowerCase() === 'today' ? 'today' : `on ${new Date(conv.created_at).toLocaleDateString()}`}.
-        </p>
-      </div>
-    );
-  }
+  if (conv.type === 'group') return <div className="h-4" />;
   return (
     <div className="px-5 pb-2 pt-8">
       <Avatar src={other?.profile?.avatar_url} name={title} seed={other?.user_id} size={56} />

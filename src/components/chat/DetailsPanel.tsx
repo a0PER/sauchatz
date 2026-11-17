@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Ban, Bell, BellOff, Camera, Flag, Lock, LogOut, MoreVertical, Pencil, ShieldCheck, ShieldOff, Trash2, User, UserMinus, UserPlus, X,
+  Ban, Bell, BellOff, Camera, Copy, Flag, Link2, Lock, RefreshCw, LogOut, MoreVertical, Pencil, ShieldCheck, ShieldOff, Trash2, User, UserMinus, UserPlus, X,
 } from 'lucide-react';
 import { MAX_GROUP_DESCRIPTION_LENGTH } from '../../config';
 import { useMe } from '../../contexts/AuthContext';
@@ -10,7 +10,7 @@ import { usePresence } from '../../contexts/PresenceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatFullDate, plural, statusLabel } from '../../lib/format';
 import { ACCEPT_ATTR, getChatImageUrl, mediaPathFromUrl, removeMedia, uploadMedia, validateImage } from '../../lib/images';
-import { errorMessage, supabase } from '../../lib/supabase';
+import { errorMessage, siteUrl, supabase } from '../../lib/supabase';
 import type { Conversation, Member, Message } from '../../lib/types';
 import { Avatar, Button, Field, IconButton, Input, Menu, Modal, TestBadge, Textarea, Toggle, cx } from '../ui';
 import { ConfirmDialog, ReportDialog } from '../Dialogs';
@@ -263,6 +263,7 @@ function GroupDetails({ conv, members, onMembersChanged }: Props) {
           })}
         </ul>
       </Section>
+      {isAdmin && <InviteLinkSection convId={conv.id} />}
       <EditGroupDialog open={editing} onClose={() => setEditing(false)} conv={conv} />
       <AddMembersDialog
         open={adding}
@@ -447,6 +448,54 @@ function LockSection({ convId }: { convId: string }) {
           if (data) { setLockedLocally(convId, false); setUnlocking(false); toast('Chat lock removed'); }
           return Boolean(data);
         }}
+      />
+    </Section>
+  );
+}
+
+function InviteLinkSection({ convId }: { convId: string }) {
+  const toast = useToast();
+  const [code, setCode] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => {
+    supabase.rpc('get_group_invite', { conv: convId }).then(({ data }) => setCode((data as string) ?? null));
+  }, [convId]);
+  const link = code ? `${siteUrl()}join/${code}` : '';
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast('Invite link copied', 'success');
+    } catch {
+      toast('Could not copy. Select the link and copy it manually.', 'error');
+    }
+  }
+
+  async function reset() {
+    const { data, error } = await supabase.rpc('reset_group_invite', { conv: convId });
+    if (error) return toast(errorMessage(error), 'error');
+    setCode(data as string);
+    toast('New link created. The old link no longer works.', 'success');
+  }
+
+  return (
+    <Section title="Invite link">
+      <p className="mb-2.5 text-xs text-muted">Anyone with this link can join the group. People without an account will sign up first.</p>
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 py-1 pl-3 pr-1">
+        <Link2 size={15} className="shrink-0 text-muted" />
+        <input readOnly value={link || 'Loading...'} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none" />
+        <IconButton label="Copy invite link" size={30} onClick={copy} disabled={!code}><Copy size={15} /></IconButton>
+      </div>
+      <button onClick={() => setConfirmReset(true)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
+        <RefreshCw size={13} /> Reset link
+      </button>
+      <ConfirmDialog
+        open={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        title="Reset the invite link?"
+        body="The current link will stop working. People already in the group stay in it."
+        confirmLabel="Reset link"
+        onConfirm={reset}
       />
     </Section>
   );
