@@ -44,8 +44,9 @@ const ok = (label) => console.log('  PASS', label);
 const bad = (label, e) => { failures++; console.log('  FAIL', label, e ? '-> ' + e : ''); };
 
 let freshAuth = false;
+let amrOverride = null;
 async function as(uid, sql, params) {
-  const claims = JSON.stringify({ sub: uid, amr: freshAuth ? [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) }] : [] });
+  const claims = JSON.stringify({ sub: uid, amr: amrOverride ?? (freshAuth ? [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) }] : []) });
   await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${uid ?? ''}', false); select set_config('request.jwt.claims', '${claims}', false);`);
   await db.exec(uid ? 'set role authenticated' : 'set role anon');
   try { return await db.query(sql, params); } finally { await db.exec('reset role'); }
@@ -315,6 +316,28 @@ await expectFail('admin cannot edit a real profile with test tools', A, `select 
 await expectFail('non-admin cannot use test tools', B, `select * from admin_list_test_messages()`);
 const flagHack = await as(B, `update profiles set is_test = true where id = '${B}' returning id`).catch(() => 'blocked');
 if (flagHack === 'blocked') ok('people cannot mark themselves as test accounts'); else bad('is_test editable');
+
+const hearts = await as(A, `select from_user from profile_hearts where to_user = '${A}'`);
+if (hearts.rows.length === 1) ok('you can see who sent you a heart'); else bad('received hearts', hearts.rows.length);
+const hd = await as(D, `select count(*)::int n from profile_hearts where to_user = '${A}'`);
+if (hd.rows[0].n === 0) ok('others cannot see who hearted someone'); else bad('heart leak');
+
+console.log('\nEmail verification');
+const X = D;
+const ev0 = (await as(X, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;
+if (ev0 === false) ok('new accounts start unverified'); else bad('default verified', ev0);
+await expectFail('cannot mark yourself verified directly', C, `update profiles set email_verified = true where id = '${X}'`);
+amrOverride = [{ method: 'password', timestamp: 1 }];
+const ev1 = (await as(X, `select mark_email_verified() v`)).rows[0].v;
+if (ev1 === false) ok('password sign-in does not verify email'); else bad('password verified', ev1);
+amrOverride = [{ method: 'otp', timestamp: 1 }];
+const ev2 = (await as(X, `select mark_email_verified() v`)).rows[0].v;
+amrOverride = null;
+const ev3 = (await as(A, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;
+if (ev2 === true && ev3 === true) ok('opening the emailed link verifies, and others can see it'); else bad('verify', `${ev2} ${ev3}`);
+await db.exec(`update auth.users set email = 'cara.new@example.com' where id = '${X}'`);
+const ev4 = (await as(X, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;
+if (ev4 === false) ok('changing email resets verification'); else bad('email change', ev4);
 
 console.log('\nAccount deletion');
 await expectOk('Bob deletes his account', B, 'select delete_my_account()');

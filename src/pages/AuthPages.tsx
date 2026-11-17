@@ -2,7 +2,8 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, MailCheck, ShieldCheck } from 'lucide-react';
 import { APP_NAME } from '../config';
-import { errorMessage, siteUrl, supabase } from '../lib/supabase';
+import { errorMessage, sendVerificationEmail, siteUrl, supabase } from '../lib/supabase';
+import { useToast } from '../contexts/ToastContext';
 import { formatAsTyped, normalizePhone } from '../lib/phone';
 
 export const STAFF_LOGIN_DOMAIN = 'staff.sauchatz.app';
@@ -140,6 +141,8 @@ export function SignUpPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [agree, setAgree] = useState(false);
+  const [verifyNow, setVerifyNow] = useState(true);
+  const toast = useToast();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -158,9 +161,25 @@ export function SignUpPage() {
       password,
       options: { emailRedirectTo: siteUrl(), data: { display_name: name.trim(), ...(digits ? { phone: digits } : {}) } },
     });
+    if (error) {
+      setBusy(false);
+      return setError(errorMessage(error));
+    }
+    if (!data.session) {
+      // This Supabase project still requires everyone to confirm their email.
+      setBusy(false);
+      return setSent(true);
+    }
+    if (verifyNow) {
+      const { error: mailError } = await sendVerificationEmail(email.trim());
+      toast(
+        mailError
+          ? 'Account created. We could not send the verification email right now. You can send it later from Settings.'
+          : 'Account created. Open the link we emailed you to verify your address.',
+        mailError ? 'error' : 'success',
+      );
+    }
     setBusy(false);
-    if (error) return setError(errorMessage(error));
-    if (!data.session) setSent(true);
   }
 
   if (sent) {
@@ -182,7 +201,7 @@ export function SignUpPage() {
         <Field label="Your name" hint="This is what everyone sees.">
           <Input required maxLength={60} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
-        <Field label="Email" hint="We will send a link to verify it.">
+        <Field label="Email" hint="Used to sign in and reset your password. Never shown to others.">
           <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Phone number (optional)" hint="Kept private. Only you and the site admin can see it.">
@@ -191,6 +210,15 @@ export function SignUpPage() {
         <Field label="Password" hint="At least 8 characters.">
           <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" />
         </Field>
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] text-ink">
+          <input type="checkbox" checked={verifyNow} onChange={(e) => setVerifyNow(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+          <span>
+            <span className="font-medium">Verify my email (recommended)</span>
+            <span className="mt-0.5 block text-muted">
+              We will email you a link. Verified accounts show a check on their profile, and you can always reset your password. You can skip this and verify later in Settings.
+            </span>
+          </span>
+        </label>
         <label className="flex cursor-pointer items-start gap-2.5 pt-1 text-[13px] text-ink">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
           <span>

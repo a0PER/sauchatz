@@ -69,8 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDetails((d as ProfileDetails | null) ?? { user_id: userId, birth_date: null, class_year: null, major: null, hometown: null, here_for: [], interests: [], prompts: [], hidden_fields: [] });
     setIsAdmin(Boolean(admin));
     if (p) {
-      setProfile(p as Profile);
-      cacheProfile(p as Profile);
+      let prof = p as Profile;
+      // If this session came from a link sent to their email, record that the email is verified.
+      if (!prof.email_verified) {
+        const { data: verified } = await supabase.rpc('mark_email_verified');
+        if (verified) prof = { ...prof, email_verified: true };
+      }
+      setProfile(prof);
+      cacheProfile(prof);
     }
     if (s) setSettings(s as UserSettings);
   }, [userId]);

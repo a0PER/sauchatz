@@ -14,6 +14,8 @@ export interface Profile {
   is_public: boolean;
   is_test?: boolean;
   show_hearts?: boolean;
+  /** True once the person opened a link sent to their email. */
+  email_verified?: boolean;
   created_at: string;
   updated_at: string;
 }

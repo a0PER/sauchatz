@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Ban, BookOpen, Flag, GraduationCap, Heart, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
+  ArrowLeft, Ban, BadgeCheck, BookOpen, MailWarning, Flag, GraduationCap, Heart, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
 } from 'lucide-react';
 import { useMe } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
@@ -285,6 +285,15 @@ export default function ProfilePage() {
                 <PresenceDot presence={presence} className="border-white/70" />
                 {statusLabel(presence)}
               </p>
+              {profile.email_verified ? (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-[#188038]">
+                  <BadgeCheck size={14} /> Email verified
+                </span>
+              ) : (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-xs font-medium text-white/90">
+                  <MailWarning size={14} /> Email not verified
+                </span>
+              )}
             </div>
           </div>
 

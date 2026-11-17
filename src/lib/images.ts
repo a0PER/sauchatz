@@ -67,7 +67,7 @@ export function mediaPathFromUrl(url: string | null | undefined) {
 export async function makeBlurPreview(file: File): Promise<string | null> {
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) return null;
-  const scale = 20 / Math.max(bitmap.width, bitmap.height);
+  const scale = 48 / Math.max(bitmap.width, bitmap.height);
   const w = Math.max(1, Math.round(bitmap.width * scale));
   const h = Math.max(1, Math.round(bitmap.height * scale));
   const canvas = document.createElement('canvas');
@@ -75,11 +75,10 @@ export async function makeBlurPreview(file: File): Promise<string | null> {
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.filter = 'blur(1.5px)';
   ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close();
-  const url = canvas.toDataURL('image/jpeg', 0.5);
-  return url.length <= 6000 ? url : null;
+  const url = canvas.toDataURL('image/jpeg', 0.6);
+  return url.length <= 12000 ? url : null;
 }
 
 /** Uploads a picture sent in a chat to the private "chat-images" bucket. */

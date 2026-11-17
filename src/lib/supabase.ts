@@ -24,6 +24,11 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong. Ple
   return fallback;
 }
 
+/** Emails a sign-in link. Opening it proves the address is theirs and marks it verified. */
+export async function sendVerificationEmail(email: string) {
+  return supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: siteUrl() } });
+}
+
 /** Full address of the site, including any sub-folder it is hosted in. */
 export function siteUrl() {
   return window.location.origin + import.meta.env.BASE_URL;

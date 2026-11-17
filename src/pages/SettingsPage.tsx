@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Bell, Check, ChevronRight, ImagePlus, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Bell, Check, ChevronRight, ImagePlus, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
 import { ACCENTS, BACKGROUND_PRESETS, chatBackgroundCss, readLayout, type Accent, type Density, type Layout, type MessageStyle, type TextSize } from '../lib/layout';
 import { ACCEPT_ATTR, mediaPathFromUrl, removeMedia, uploadMedia, validateImage } from '../lib/images';
 import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { statusLabel } from '../lib/format';
-import { errorMessage, siteUrl, supabase } from '../lib/supabase';
+import { errorMessage, sendVerificationEmail, siteUrl, supabase } from '../lib/supabase';
 import { formatAsTyped, formatPhone, normalizePhone } from '../lib/phone';
 import type { Profile, Status, Theme } from '../lib/types';
 import { Avatar, Button, Field, IconButton, Input, PresenceDot, Spinner, Toggle, cx } from '../components/ui';
@@ -118,9 +118,20 @@ function RadioCards<T extends string>({ value, onChange, options }: { value: T; 
 /* ------------------------------ Account ------------------------------ */
 
 function AccountSection() {
-  const { email } = useMe();
+  const { email, profile } = useMe();
   const { signOut, settings, updateSettings } = useAuth();
   const toast = useToast();
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifySent, setVerifySent] = useState(false);
+
+  async function sendVerify() {
+    setVerifyBusy(true);
+    const { error } = await sendVerificationEmail(email);
+    setVerifyBusy(false);
+    if (error) return toast(/rate limit/i.test(error.message) ? 'Too many emails were sent recently. Please try again later.' : errorMessage(error), 'error');
+    setVerifySent(true);
+    toast('Verification link sent. Open it to verify your email.', 'success');
+  }
   const [newEmail, setNewEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [phone, setPhone] = useState(settings?.phone ? formatPhone(settings.phone) : '');
@@ -178,6 +189,17 @@ function AccountSection() {
   return (
     <>
       <Card title="Email address" description={<>You sign in with <span className="font-medium text-ink">{email}</span>. It is never shown to other members.</>}>
+        {profile.email_verified ? (
+          <p className="mb-4 flex items-center gap-2 text-sm font-medium text-success"><BadgeCheck size={17} /> Verified. Your profile shows a verified check.</p>
+        ) : (
+          <div className="mb-4 flex flex-col gap-3 rounded-xl bg-surface-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm">
+              <p className="font-medium text-ink">Not verified (verifying is recommended)</p>
+              <p className="mt-0.5 text-muted">{verifySent ? 'Check your inbox and spam folder for the link.' : 'Your profile shows that your email is not verified. We will email you a link to confirm it.'}</p>
+            </div>
+            <Button size="sm" onClick={sendVerify} loading={verifyBusy} className="shrink-0">{verifySent ? 'Send again' : 'Send link'}</Button>
+          </div>
+        )}
         <form onSubmit={changeEmail} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <Field label="New email">

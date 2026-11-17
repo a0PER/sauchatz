@@ -28,9 +28,9 @@ export function LockedImage({ blur, label }: { blur?: string | null; label?: str
   return (
     <div className="relative mt-1 h-[180px] w-[240px] max-w-[68vw] overflow-hidden rounded-xl border border-line bg-surface-2" role="img" aria-label="Private photo">
       {blur && (
-        <img src={blur} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-125 object-cover blur-xl" />
+        <img src={blur} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover blur-[6px]" />
       )}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/25 px-3 text-center text-white">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/10 px-3 text-center text-white">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35"><Lock size={16} /></span>
         <span className="text-xs font-medium drop-shadow">{label ?? 'Private photo'}</span>
       </div>

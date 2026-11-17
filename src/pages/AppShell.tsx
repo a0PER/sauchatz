@@ -16,6 +16,7 @@ import { Avatar, IconButton, Logo, Menu, PresenceDot, SectionLabel, cx } from '.
 import { NewChatDialog, NewGroupDialog } from '../components/NewConversationDialogs';
 import { useLayout } from '../lib/layout';
 import { ChooseNameDialog } from '../components/ChooseNameDialog';
+import { HeartNotifier } from '../components/HeartNotifier';
 
 interface ShellApi {
   openNewChat: () => void;
@@ -35,6 +36,7 @@ export default function AppShell() {
 
   return (
     <ShellContext.Provider value={api}>
+      <HeartNotifier />
       <div className="flex h-full flex-col">
         <TopBar />
         <div className="flex min-h-0 flex-1 md:pb-3 md:pr-3">

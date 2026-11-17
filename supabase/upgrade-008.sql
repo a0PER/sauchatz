@@ -6,7 +6,7 @@
 alter table public.messages add column if not exists image_blur text;
 alter table public.messages drop constraint if exists messages_image_blur;
 alter table public.messages add constraint messages_image_blur
-  check (image_blur is null or (image_blur like 'data:image/%;base64,%' and char_length(image_blur) <= 6000));
+  check (image_blur is null or (image_blur like 'data:image/%;base64,%' and char_length(image_blur) <= 12000));
 
 -- Private photos carry no caption, because everyone in the group can now see the message row.
 update public.messages set body = '' where recipient_id is not null and body <> '';
