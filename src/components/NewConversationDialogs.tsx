@@ -19,7 +19,7 @@ function usePeopleSearch(term: string, exclude: string[]) {
     let cancelled = false;
     setLoading(true);
     const t = setTimeout(async () => {
-      let query = supabase.from('profiles').select('*').order('display_name').limit(40);
+      let query = supabase.from('profiles').select('*').eq('is_public', true).order('display_name').limit(40);
       const clean = term.trim().replace(/[%_,()]/g, '');
       if (clean) query = query.ilike('display_name', `%${clean}%`);
       if (excludeKey) query = query.not('id', 'in', `(${excludeKey})`);

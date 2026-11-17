@@ -5,7 +5,7 @@ import { useShell } from './AppShell';
 
 /** Shown in the main panel when no conversation is open. */
 export default function HomePage() {
-  const { profile, userId } = useMe();
+  const { profile } = useMe();
   const { openNewChat, openNewGroup } = useShell();
   const needsSetup = !profile.avatar_url || !profile.description;
 
@@ -35,7 +35,7 @@ export default function HomePage() {
         </div>
         {needsSetup && (
           <Link
-            to={`/u/${userId}?edit=1`}
+            to="/profile/edit"
             className="mt-6 flex items-center gap-3.5 rounded-xl bg-accent-soft px-4 py-3.5 text-left text-on-accent-soft hover:brightness-[0.98]"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface/70"><Camera size={18} /></span>

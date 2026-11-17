@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { ArrowLeft, Info, MessageSquareOff, Users } from 'lucide-react';
+import { ArrowLeft, Info, Lock, LockKeyhole, MessageSquareOff, Users } from 'lucide-react';
+import { EnterPinDialog, ForgotPinDialog } from '../components/ChatPin';
 import { MESSAGE_PAGE_SIZE } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useChats } from '../contexts/ChatContext';
@@ -25,11 +26,11 @@ function sortByTime(list: Message[]) {
   return [...list].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
 
-export default function ChatPage() {
+function ChatRoom() {
   const { id = '' } = useParams();
   const { userId, profile: me } = useMe();
   const { settings } = useAuth();
-  const { conversations, setActiveConversation, markReadLocally, refresh: refreshList } = useChats();
+  const { conversations, setActiveConversation, markReadLocally, refresh: refreshList, relock } = useChats();
   const { presenceOf } = usePresence();
   const toast = useToast();
   const navigate = useNavigate();
@@ -371,6 +372,11 @@ export default function ChatPage() {
             <div className="h-9 w-48 animate-pulse rounded-lg bg-surface-2" />
           )}
           <div className="ml-auto flex items-center gap-1">
+            {summary?.locked && (
+              <IconButton label="Lock this chat now" onClick={() => { relock(id); navigate('/'); }}>
+                <Lock size={18} />
+              </IconButton>
+            )}
             {conv?.type === 'group' && (
               <IconButton label="Members" onClick={toggleDetails} className="hidden sm:inline-flex">
                 <Users size={19} />
@@ -543,3 +549,51 @@ function ConversationIntro({ conv, title, other }: { conv: Conversation; title: 
   );
 }
 
+
+/** Shows the chat, or a PIN screen first when the chat is locked. */
+export default function ChatPage() {
+  const { id = '' } = useParams();
+  const { conversations, loaded, isUnlocked, markUnlocked, refresh } = useChats();
+  const navigate = useNavigate();
+  const [asking, setAsking] = useState(true);
+  const [forgot, setForgot] = useState(false);
+  const summary = conversations.find((c) => c.id === id);
+
+  useEffect(() => { setAsking(true); }, [id]);
+
+  if (!loaded) return <div className="flex flex-1 items-center justify-center"><Spinner size={24} /></div>;
+  if (!summary?.locked || isUnlocked(id)) return <ChatRoom />;
+
+  const title = summary.type === 'group' ? summary.name ?? 'Group' : summary.other_display_name ?? 'Chat';
+  return (
+    <div className="flex flex-1 flex-col">
+      <header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-2 md:hidden">
+        <IconButton label="Back" onClick={() => navigate('/')}><ArrowLeft size={20} /></IconButton>
+      </header>
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState
+          icon={<LockKeyhole size={26} />}
+          title={`${title} is locked`}
+          body="Enter your chat PIN to open this conversation."
+          action={
+            <div className="flex flex-col items-center gap-3">
+              <Button onClick={() => setAsking(true)}>Enter PIN</Button>
+              <button onClick={() => setForgot(true)} className="text-[13px] font-medium text-accent hover:underline">Forgot PIN?</button>
+            </div>
+          }
+        />
+      </div>
+      <EnterPinDialog
+        open={asking}
+        onClose={() => setAsking(false)}
+        title={`Unlock ${title}`}
+        onSubmit={async (pin) => {
+          const { data } = await supabase.rpc('verify_chat_pin', { p_pin: pin });
+          if (data) markUnlocked(id);
+          return Boolean(data);
+        }}
+      />
+      <ForgotPinDialog open={forgot} onClose={() => setForgot(false)} onDone={refresh} />
+    </div>
+  );
+}

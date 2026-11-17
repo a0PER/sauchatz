@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Ban, Bell, BellOff, Camera, Flag, LogOut, MoreVertical, Pencil, ShieldCheck, ShieldOff, Trash2, User, UserMinus, UserPlus, X,
+  Ban, Bell, BellOff, Camera, Flag, Lock, LogOut, MoreVertical, Pencil, ShieldCheck, ShieldOff, Trash2, User, UserMinus, UserPlus, X,
 } from 'lucide-react';
 import { MAX_GROUP_DESCRIPTION_LENGTH } from '../../config';
 import { useMe } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ import { errorMessage, supabase } from '../../lib/supabase';
 import type { Conversation, Member, Message } from '../../lib/types';
 import { Avatar, Button, Field, IconButton, Input, Menu, Modal, Textarea, Toggle, cx } from '../ui';
 import { ConfirmDialog, ReportDialog } from '../Dialogs';
+import { EnterPinDialog, SetPinDialog, usePinStatus } from '../ChatPin';
 import { AddMembersDialog } from '../NewConversationDialogs';
 
 interface Props {
@@ -109,6 +110,7 @@ export function DetailsPanel(props: Props) {
           </div>
           <p className="mt-1.5 pl-[30px] text-xs text-muted">You will not get sounds or alerts, and it will not count toward unread.</p>
         </Section>
+        <LockSection convId={conv.id} />
         <Section title="Shared photos">
           <SharedPhotos messages={messages} onOpen={onOpenImage} />
         </Section>
@@ -396,5 +398,56 @@ function EditGroupDialog({ open, onClose, conv }: { open: boolean; onClose: () =
         </Field>
       </div>
     </Modal>
+  );
+}
+
+function LockSection({ convId }: { convId: string }) {
+  const { conversations, setLockedLocally, markUnlocked } = useChats();
+  const { hasPin, refresh } = usePinStatus();
+  const toast = useToast();
+  const [setting, setSetting] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const locked = conversations.find((c) => c.id === convId)?.locked ?? false;
+
+  async function lock() {
+    const { error } = await supabase.rpc('set_chat_locked', { conv: convId, p_locked: true });
+    if (error) return toast(errorMessage(error), 'error');
+    setLockedLocally(convId, true);
+    markUnlocked(convId);
+    toast('Chat locked. It will ask for your PIN next time.', 'success');
+  }
+
+  function onToggle(v: boolean) {
+    if (v) {
+      if (hasPin) lock();
+      else setSetting(true);
+    } else {
+      setUnlocking(true);
+    }
+  }
+
+  return (
+    <Section title="Chat lock">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-sm text-ink">
+          <Lock size={18} className="text-muted" />
+          Lock with PIN
+        </div>
+        <Toggle checked={locked} onChange={onToggle} label="Lock this chat with a PIN" disabled={hasPin === null} />
+      </div>
+      <p className="mt-1.5 pl-[30px] text-xs text-muted">Hides message previews and needs your PIN to open. Only affects your view.</p>
+      <SetPinDialog open={setting} onClose={() => setSetting(false)} hasPin={false} onDone={async () => { await refresh(); await lock(); }} />
+      <EnterPinDialog
+        open={unlocking}
+        onClose={() => setUnlocking(false)}
+        title="Remove chat lock"
+        onSubmit={async (pin) => {
+          const { data, error } = await supabase.rpc('set_chat_locked', { conv: convId, p_locked: false, p_pin: pin });
+          if (error) { toast(errorMessage(error), 'error'); return false; }
+          if (data) { setLockedLocally(convId, false); setUnlocking(false); toast('Chat lock removed'); }
+          return Boolean(data);
+        }}
+      />
+    </Section>
   );
 }

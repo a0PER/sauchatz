@@ -11,8 +11,25 @@ export interface Profile {
   status: Status;
   allow_messages_from: 'everyone' | 'nobody';
   show_read_receipts: boolean;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProfilePrompt {
+  question: string;
+  answer: string;
+}
+
+export interface ProfileDetails {
+  user_id: string;
+  birth_date: string | null;
+  class_year: string | null;
+  major: string | null;
+  hometown: string | null;
+  here_for: string[];
+  interests: string[];
+  prompts: ProfilePrompt[];
 }
 
 export interface UserSettings {
@@ -51,6 +68,7 @@ export interface ConversationSummary {
   avatar_url: string | null;
   last_message_at: string;
   muted: boolean;
+  locked: boolean;
   unread_count: number;
   member_count: number;
   last_body: string | null;

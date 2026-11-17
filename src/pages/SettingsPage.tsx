@@ -5,10 +5,11 @@ import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { statusLabel } from '../lib/format';
-import { errorMessage, siteUrl, supabase } from '../lib/supabase';
+import { errorMessage, supabase } from '../lib/supabase';
 import type { Profile, Status, Theme } from '../lib/types';
 import { Avatar, Button, Field, IconButton, Input, PresenceDot, Spinner, Toggle, cx } from '../components/ui';
 import { ConfirmDialog } from '../components/Dialogs';
+import { ChatPinCard } from '../components/ChatPin';
 
 type SectionId = 'account' | 'profile' | 'notifications' | 'privacy' | 'appearance';
 const SECTIONS: { id: SectionId; label: string; icon: ReactNode }[] = [
@@ -114,26 +115,14 @@ function RadioCards<T extends string>({ value, onChange, options }: { value: T; 
 /* ------------------------------ Account ------------------------------ */
 
 function AccountSection() {
-  const { email } = useMe();
+  const { phone } = useMe();
   const { signOut } = useAuth();
   const toast = useToast();
-  const [newEmail, setNewEmail] = useState('');
-  const [emailBusy, setEmailBusy] = useState(false);
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
-
-  async function changeEmail(e: FormEvent) {
-    e.preventDefault();
-    setEmailBusy(true);
-    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() }, { emailRedirectTo: siteUrl() });
-    setEmailBusy(false);
-    if (error) return toast(errorMessage(error), 'error');
-    setNewEmail('');
-    toast('Check both inboxes to confirm the change.', 'success');
-  }
 
   async function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -156,15 +145,9 @@ function AccountSection() {
 
   return (
     <>
-      <Card title="Email address" description={<>You sign in with <span className="font-medium text-ink">{email}</span>.</>}>
-        <form onSubmit={changeEmail} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Field label="New email">
-              <Input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} autoComplete="email" />
-            </Field>
-          </div>
-          <Button type="submit" variant="secondary" loading={emailBusy} disabled={!newEmail.trim()}>Change email</Button>
-        </form>
+      <Card title="Phone number" description="You sign in with this number. It is never shown to other members.">
+        <p className="text-[15px] font-medium text-ink">{phone}</p>
+        <p className="mt-1 text-[13px] text-muted">To change your number, contact the Sauchatz admin.</p>
       </Card>
 
       <Card title="Password">
@@ -230,7 +213,7 @@ function ProfileSection() {
 
   return (
     <>
-      <Card title="Your profile" description="Everyone signed in can see your picture, name, description and photos.">
+      <Card title="Your profile" description={profile.is_public ? "Public: everyone on Sauchatz can find you and see your profile." : "Private: only people you chat with can see your photos and details."}>
         <Link to={`/u/${userId}`} className="-mx-2 flex items-center gap-4 rounded-xl px-2 py-2 hover:bg-surface-2">
           <Avatar src={profile.avatar_url} name={profile.display_name} seed={userId} size={52} />
           <div className="min-w-0 flex-1">
@@ -240,8 +223,8 @@ function ProfileSection() {
           <ChevronRight size={18} className="text-muted" />
         </Link>
         <div className="mt-3 flex gap-2">
-          <Link to={`/u/${userId}?edit=1`}><Button size="sm" variant="secondary" tabIndex={-1}>Edit profile</Button></Link>
-          <Link to={`/u/${userId}`}><Button size="sm" variant="ghost" tabIndex={-1}>Manage photos</Button></Link>
+          <Link to="/profile/edit"><Button size="sm" variant="secondary" tabIndex={-1}>Edit profile</Button></Link>
+          <Link to={`/u/${userId}`}><Button size="sm" variant="ghost" tabIndex={-1}>View profile</Button></Link>
         </div>
       </Card>
       <Card title="Status" description="Shown next to your name when you are online.">
@@ -334,6 +317,14 @@ function PrivacySection() {
 
   return (
     <>
+      <Card title="Profile visibility">
+        <Row
+          title="Public profile"
+          description={profile.is_public ? 'Everyone can find you in People and search, and see your photos and details.' : 'Hidden from People and search. Only people you already chat with see your photos and details.'}
+          control={<Toggle checked={profile.is_public} onChange={(v) => set({ is_public: v })} label="Public profile" />}
+        />
+      </Card>
+      <ChatPinCard />
       <Card title="Who can message you" description="People already in a conversation with you can always reply.">
         <RadioCards
           value={profile.allow_messages_from}

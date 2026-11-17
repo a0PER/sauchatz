@@ -1,6 +1,7 @@
 // Runs schema.sql inside PGlite (real Postgres in WASM) with minimal
 // Supabase stubs, then exercises the security rules as different users.
 import { PGlite } from '@electric-sql/pglite';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -8,13 +9,17 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const schema = readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
 
-const db = new PGlite();
+const db = new PGlite({ extensions: { pgcrypto } });
 
 const stubs = `
 create role anon nologin;
 create role authenticated nologin;
 create schema auth;
-create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
+create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}', encrypted_password text, created_at timestamptz default now(), updated_at timestamptz, last_sign_in_at timestamptz);
+create schema extensions;
+create function auth.jwt() returns jsonb language sql stable as
+  $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+grant execute on function auth.jwt() to authenticated, anon;
 create function auth.uid() returns uuid language sql stable as
   $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 grant usage on schema auth to authenticated, anon;
@@ -38,8 +43,10 @@ let failures = 0;
 const ok = (label) => console.log('  PASS', label);
 const bad = (label, e) => { failures++; console.log('  FAIL', label, e ? '-> ' + e : ''); };
 
+let freshAuth = false;
 async function as(uid, sql, params) {
-  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${uid ?? ''}', false);`);
+  const claims = JSON.stringify({ sub: uid, amr: freshAuth ? [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) }] : [] });
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${uid ?? ''}', false); select set_config('request.jwt.claims', '${claims}', false);`);
   await db.exec(uid ? 'set role authenticated' : 'set role anon');
   try { return await db.query(sql, params); } finally { await db.exec('reset role'); }
 }
@@ -136,6 +143,67 @@ await expectOk('member uploads chat image', B, `insert into storage.objects (buc
 await expectFail('non-member cannot upload chat image', C, `insert into storage.objects (bucket_id, name) values ('chat-images', '${gid}/pic2.jpg')`);
 const cImg = await as(C, `select count(*)::int n from storage.objects where bucket_id = 'chat-images'`);
 if (cImg.rows[0].n === 0) ok('non-member cannot see chat images'); else bad('chat image leak');
+
+
+console.log('\nPrivate profiles');
+await expectOk('Cara writes profile details', C, `update profile_details set major = 'Nursing', interests = array['Hiking'] where user_id = '${C}'`);
+await expectOk('Cara adds a photo', C, `insert into profile_photos (user_id, storage_path, url) values ('${C}', 'x', 'y')`);
+await expectOk('Cara makes her profile private', C, `update profiles set is_public = false where id = '${C}'`);
+const cd = await as(A, `select count(*)::int n from profile_details where user_id = '${C}'`);
+const cp = await as(A, `select count(*)::int n from profile_photos where user_id = '${C}'`);
+if (cd.rows[0].n === 0 && cp.rows[0].n === 0) ok('stranger cannot see a private profile details or photos'); else bad('private profile leak');
+const ad = await as(A, `select count(*)::int n from profile_details where user_id = '${A}'`);
+if (ad.rows[0].n === 1) ok('owner sees own details'); else bad('owner details');
+await expectFail('under 18 birthday rejected', A, `update profile_details set birth_date = current_date - interval '16 years' where user_id = '${A}'`);
+await expectOk('18+ birthday accepted', A, `update profile_details set birth_date = '2004-05-01' where user_id = '${A}'`);
+const bEditD = await as(B, `update profile_details set major = 'x' where user_id = '${A}' returning user_id`).catch(() => ({ rows: [] }));
+if (bEditD.rows.length === 0) ok('details edits limited to owner'); else bad('edited other details');
+
+console.log('\nChat PIN lock');
+const pinDm = (await as(A, `select get_or_create_direct('${B}') id`)).rows[0].id;
+await expectFail('cannot lock a chat before setting a PIN', A, `select set_chat_locked('${pinDm}', true)`);
+await expectFail('PIN must be digits', A, `select set_chat_pin('abcd')`);
+const s1 = await as(A, `select set_chat_pin('1234') ok`);
+if (s1.rows[0].ok) ok('set a PIN'); else bad('set pin');
+const hashRead = await as(A, `select chat_pin_hash from user_settings`).catch(() => 'blocked');
+if (hashRead === 'blocked') ok('PIN hash is not readable from the website'); else bad('hash readable');
+const st = await as(A, `select * from pin_status()`);
+if (st.rows[0].has_pin) ok('pin_status reports a PIN'); else bad('pin status');
+await expectOk('lock the chat', A, `select set_chat_locked('${pinDm}', true)`);
+const lockedList = (await as(A, `select locked, last_body from get_my_conversations() where id = '${pinDm}'`)).rows[0];
+if (lockedList.locked && lockedList.last_body === null) ok('locked chat hides its preview'); else bad('locked preview', JSON.stringify(lockedList));
+const wrong = await as(A, `select set_chat_locked('${pinDm}', false, '0000') ok`);
+if (!wrong.rows[0].ok) ok('wrong PIN cannot unlock'); else bad('unlocked with wrong pin');
+const change = await as(A, `select set_chat_pin('5678', '9999') ok`);
+if (!change.rows[0].ok) ok('cannot change PIN without the current PIN'); else bad('pin changed');
+await expectFail('cannot flip lock directly', A, `update conversation_members set locked = false where conversation_id = '${pinDm}' and user_id = '${A}'`);
+for (let i = 0; i < 4; i++) await as(A, `select verify_chat_pin('0000')`);
+const frozen = await as(A, `select verify_chat_pin('1234') ok`);
+if (!frozen.rows[0].ok) ok('PIN freezes after 5 wrong tries'); else bad('no lockout');
+await db.exec(`update user_settings set pin_locked_until = null where user_id = '${A}'`);
+const right = await as(A, `select set_chat_locked('${pinDm}', false, '1234') ok`);
+if (right.rows[0].ok) ok('correct PIN unlocks'); else bad('correct pin failed');
+await expectFail('PIN reset needs a fresh password sign-in', A, `select reset_chat_pin()`);
+freshAuth = true;
+await expectOk('PIN reset after password re-entry', A, `select reset_chat_pin()`);
+freshAuth = false;
+
+console.log('\nAdmin tools');
+await expectFail('non-admin cannot list users', A, `select * from admin_list_users()`);
+await expectFail('non-admin cannot delete users', A, `select admin_delete_user('${C}')`);
+await db.exec(`insert into admins (user_id) values ('${A}')`);
+const users = await expectOk('admin lists users', A, `select * from admin_list_users()`);
+if (users && users.rows.length >= 3 && users.rows.some((u) => u.login === 'cara@example.com') && !('encrypted_password' in users.rows[0])) ok('admin sees logins but never passwords'); else bad('admin list', JSON.stringify(users?.rows[0]));
+await expectOk('admin sets a new password', A, `select admin_set_password('${C}', 'newpassword1')`);
+const pw = await db.query(`select encrypted_password like '$2%' ok from auth.users where id = '${C}'`);
+if (pw.rows[0].ok) ok('new password stored hashed'); else bad('password not hashed');
+await expectOk('Bob reports Cara', B, `insert into reports (reporter_id, reported_user_id, reason) values ('${B}', '${C}', 'spam')`);
+const reps = await expectOk('admin sees reports', A, `select * from admin_list_reports()`);
+if (reps && reps.rows.length === 1) ok('report listed'); else bad('reports');
+await expectFail('non-admin cannot see reports', B, `select * from admin_list_reports()`);
+await expectOk('admin deletes Cara', A, `select admin_delete_user('${C}')`);
+const cGone = await db.query(`select count(*)::int n from auth.users where id = '${C}'`);
+if (cGone.rows[0].n === 0) ok('account removed'); else bad('not deleted');
 
 console.log('\nAccount deletion');
 await expectOk('Bob deletes his account', B, 'select delete_my_account()');

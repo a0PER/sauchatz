@@ -12,6 +12,8 @@ import ChatPage from './pages/ChatPage';
 import PeoplePage from './pages/PeoplePage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
+import EditProfilePage from './pages/EditProfilePage';
+import AdminPage from './pages/AdminPage';
 
 function Splash() {
   return (
@@ -66,6 +68,8 @@ function Gate() {
             <Route path="people" element={<PeoplePage />} />
             <Route path="u/:id" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="profile/edit" element={<EditProfilePage />} />
+            <Route path="admin" element={<AdminPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

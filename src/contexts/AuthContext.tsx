@@ -2,13 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { cacheProfile } from '../lib/profileCache';
-import type { Profile, Theme, UserSettings } from '../lib/types';
+import type { Profile, ProfileDetails, Theme, UserSettings } from '../lib/types';
+import { loginToPhone } from '../lib/phone';
 
 interface AuthState {
   session: Session | null;
   loading: boolean;
   profile: Profile | null;
   settings: UserSettings | null;
+  details: ProfileDetails | null;
+  isAdmin: boolean;
+  updateDetails: (patch: Partial<ProfileDetails>) => Promise<void>;
   recoveryMode: boolean;
   clearRecovery: () => void;
   refreshProfile: () => Promise<void>;
@@ -32,6 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [details, setDetails] = useState<ProfileDetails | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const userId = session?.user.id ?? null;
 
@@ -54,10 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
-    const [{ data: p }, { data: s }] = await Promise.all([
+    const [{ data: p }, { data: s }, { data: d }, { data: admin }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('user_settings').select('*').eq('user_id', userId).single(),
+      supabase.from('user_settings').select('user_id, theme, notify_desktop, notify_sound, enter_to_send').eq('user_id', userId).single(),
+      supabase.from('profile_details').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.rpc('am_i_admin'),
     ]);
+    setDetails((d as ProfileDetails | null) ?? { user_id: userId, birth_date: null, class_year: null, major: null, hometown: null, here_for: [], interests: [], prompts: [] });
+    setIsAdmin(Boolean(admin));
     if (p) {
       setProfile(p as Profile);
       cacheProfile(p as Profile);
@@ -101,6 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, refreshProfile]);
 
+  const updateDetails = useCallback(async (patch: Partial<ProfileDetails>) => {
+    if (!userId) return;
+    const { data, error } = await supabase.from('profile_details').update(patch).eq('user_id', userId).select().single();
+    if (error) throw error;
+    setDetails(data as ProfileDetails);
+  }, [userId]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -108,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        session, loading, profile, settings, recoveryMode,
+        session, loading, profile, settings, details, isAdmin, updateDetails, recoveryMode,
         clearRecovery: () => setRecoveryMode(false),
         refreshProfile, updateProfile, updateSettings, signOut,
       }}
@@ -128,5 +145,6 @@ export function useAuth() {
 export function useMe() {
   const { session, profile } = useAuth();
   if (!session || !profile) throw new Error('useMe used while signed out');
-  return { userId: session.user.id, email: session.user.email ?? '', profile };
+  const login = session.user.email ?? '';
+  return { userId: session.user.id, email: login, phone: loginToPhone(login), profile };
 }

@@ -1,76 +1,80 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Ban, Camera, Flag, ImagePlus, MessageSquare, MoreHorizontal, Pencil, Trash2, UserX } from 'lucide-react';
-import { MAX_DESCRIPTION_LENGTH } from '../config';
-import { useAuth, useMe } from '../contexts/AuthContext';
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft, Ban, BookOpen, Flag, GraduationCap, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
+} from 'lucide-react';
+import { useMe } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
 import { useToast } from '../contexts/ToastContext';
-import { formatFullDate, formatMonthYear, plural, statusLabel } from '../lib/format';
-import { ACCEPT_ATTR, mediaPathFromUrl, removeMedia, uploadMedia, validateImage } from '../lib/images';
+import { formatFullDate, statusLabel } from '../lib/format';
 import { cacheProfile } from '../lib/profileCache';
+import { ageFrom } from '../lib/profileOptions';
 import { errorMessage, supabase } from '../lib/supabase';
-import type { Profile, ProfilePhoto } from '../lib/types';
-import { Avatar, Button, EmptyState, Field, IconButton, Input, Menu, Modal, Spinner, Textarea } from '../components/ui';
+import type { Profile, ProfileDetails, ProfilePhoto } from '../lib/types';
+import { Avatar, Button, EmptyState, IconButton, Menu, PresenceDot, Spinner, cx } from '../components/ui';
 import { ConfirmDialog, ReportDialog } from '../components/Dialogs';
 import { Lightbox } from '../components/Lightbox';
 
+function Chip({ icon, children, tone = 'plain' }: { icon?: ReactNode; children: ReactNode; tone?: 'plain' | 'accent' }) {
+  return (
+    <span
+      className={cx(
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium',
+        tone === 'accent' ? 'bg-accent-soft text-on-accent-soft' : 'border border-line-strong text-ink',
+      )}
+    >
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+function Card({ children, className }: { children: ReactNode; className?: string }) {
+  return <section className={cx('rounded-3xl border border-line bg-surface p-6', className)}>{children}</section>;
+}
+
 export default function ProfilePage() {
   const { id = '' } = useParams();
-  const [params, setParams] = useSearchParams();
-  const { userId, profile: me } = useMe();
+  const { userId } = useMe();
   const { presenceOf } = usePresence();
   const toast = useToast();
   const navigate = useNavigate();
   const isMe = id === userId;
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [details, setDetails] = useState<ProfileDetails | null>(null);
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
+  const [canView, setCanView] = useState(true);
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
   const [blocked, setBlocked] = useState(false);
   const [opening, setOpening] = useState(false);
   const [viewer, setViewer] = useState<number | null>(null);
-  const [editOpen, setEditOpen] = useState(params.get('edit') === '1');
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [confirm, setConfirm] = useState<'block' | 'photo' | null>(null);
-  const [photoToDelete, setPhotoToDelete] = useState<ProfilePhoto | null>(null);
+  const [confirmBlock, setConfirmBlock] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
 
-  const loadPhotos = useCallback(async () => {
-    const { data } = await supabase.from('profile_photos').select('*').eq('user_id', id).order('created_at', { ascending: false });
-    setPhotos((data as ProfilePhoto[] | null) ?? []);
-  }, [id]);
+  const load = useCallback(async () => {
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+    if (!p) return setState('missing');
+    cacheProfile(p as Profile);
+    setProfile(p as Profile);
+    const visible = isMe || (p as Profile).is_public || Boolean((await supabase.rpc('shares_conversation', { other: id })).data);
+    setCanView(visible);
+    const [{ data: d }, { data: ph }, { data: b }] = await Promise.all([
+      supabase.from('profile_details').select('*').eq('user_id', id).maybeSingle(),
+      supabase.from('profile_photos').select('*').eq('user_id', id).order('created_at', { ascending: true }),
+      isMe ? Promise.resolve({ data: null }) : supabase.from('blocks').select('blocked_id').eq('blocked_id', id).maybeSingle(),
+    ]);
+    setDetails((d as ProfileDetails | null) ?? null);
+    setPhotos((ph as ProfilePhoto[] | null) ?? []);
+    setBlocked(Boolean(b));
+    setState('ready');
+  }, [id, isMe]);
 
   useEffect(() => {
-    let alive = true;
     setState('loading');
     setViewer(null);
-    (async () => {
-      const [{ data: p }, , { data: b }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', id).maybeSingle(),
-        loadPhotos(),
-        isMe ? Promise.resolve({ data: null }) : supabase.from('blocks').select('blocked_id').eq('blocked_id', id).maybeSingle(),
-      ]);
-      if (!alive) return;
-      if (!p) return setState('missing');
-      cacheProfile(p as Profile);
-      setProfile(p as Profile);
-      setBlocked(Boolean(b));
-      setState('ready');
-    })();
-    return () => { alive = false; };
-  }, [id, isMe, loadPhotos]);
-
-  // Keep my own profile in sync after edits.
-  useEffect(() => { if (isMe) setProfile(me); }, [isMe, me]);
-
-  useEffect(() => {
-    if (params.get('edit') === '1') {
-      setEditOpen(true);
-      params.delete('edit');
-      setParams(params, { replace: true });
-    }
-  }, [params, setParams]);
+    load();
+  }, [load]);
 
   async function message() {
     setOpening(true);
@@ -94,23 +98,6 @@ export default function ProfilePage() {
     toast(`${profile?.display_name} is unblocked`);
   }
 
-  async function deletePhoto(p: ProfilePhoto) {
-    const { error } = await supabase.from('profile_photos').delete().eq('id', p.id);
-    if (error) return toast(errorMessage(error), 'error');
-    removeMedia(p.storage_path);
-    setPhotos((list) => list.filter((x) => x.id !== p.id));
-    setViewer(null);
-    toast('Photo deleted');
-  }
-
-  function choosePhotos(files: FileList | null) {
-    const list = [...(files ?? [])];
-    const bad = list.find((f) => validateImage(f));
-    if (bad) toast(validateImage(bad)!, 'error');
-    const ok = list.filter((f) => !validateImage(f)).slice(0, 10);
-    if (ok.length) setUploadFiles(ok);
-  }
-
   if (state === 'missing') {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -123,312 +110,176 @@ export default function ProfilePage() {
   }
 
   const presence = presenceOf(profile.id, profile.status);
+  const age = ageFrom(details?.birth_date);
+  const firstName = profile.display_name.split(' ')[0];
+  const prompts = (details?.prompts ?? []).filter((p) => p.answer?.trim());
+  const lightboxItems = photos.map((p) => ({ src: p.url, caption: p.caption, meta: formatFullDate(p.created_at) }));
+  if (profile.avatar_url) lightboxItems.unshift({ src: profile.avatar_url, caption: '', meta: 'Profile picture' });
+  const offset = profile.avatar_url ? 1 : 0;
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      {isMe ? (
+        <Button icon={<Pencil size={16} />} onClick={() => navigate('/profile/edit')}>Edit profile</Button>
+      ) : blocked ? (
+        <Button variant="secondary" icon={<Ban size={16} />} onClick={unblock}>Unblock</Button>
+      ) : (
+        <Button icon={<MessageSquare size={16} />} loading={opening} onClick={message}>Message {firstName}</Button>
+      )}
+      {!isMe && (
+        <Menu
+          trigger={(t) => (
+            <button {...t} className="inline-flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-surface-2" aria-label="More options">
+              <MoreHorizontal size={18} />
+            </button>
+          )}
+          items={[
+            blocked
+              ? { label: 'Unblock', icon: <Ban size={16} />, onSelect: unblock }
+              : { label: 'Block', icon: <Ban size={16} />, danger: true, onSelect: () => setConfirmBlock(true) },
+            { label: 'Report', icon: <Flag size={16} />, danger: true, onSelect: () => setReporting(true) },
+          ]}
+        />
+      )}
+    </div>
+  );
+
+  // Interleave gallery photos with prompt answers, like a dating profile.
+  const blocks: ReactNode[] = [];
+  const maxLen = Math.max(photos.length, prompts.length);
+  for (let i = 0; i < maxLen; i++) {
+    const ph = photos[i];
+    if (ph) {
+      blocks.push(
+        <button key={ph.id} onClick={() => setViewer(i + offset)} className="group relative block w-full overflow-hidden rounded-3xl bg-surface-2">
+          <img src={ph.url} alt={ph.caption || `${firstName}'s photo`} loading="lazy" className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
+          {ph.caption && <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-5 pb-4 pt-10 text-left text-sm text-white">{ph.caption}</span>}
+        </button>,
+      );
+    }
+    const pr = prompts[i];
+    if (pr) {
+      blocks.push(
+        <Card key={'p' + i} className="px-6 py-7">
+          <p className="text-[13px] font-semibold text-muted">{pr.question}</p>
+          <p className="mt-2 whitespace-pre-wrap text-[22px] font-semibold leading-snug tracking-tight text-ink">{pr.answer}</p>
+        </Card>,
+      );
+    }
+    if (i === 0 && (details?.interests?.length ?? 0) > 0) {
+      blocks.push(
+        <Card key="interests">
+          <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-muted"><Sparkles size={15} /> Interests</h3>
+          <div className="flex flex-wrap gap-2">{details!.interests.map((t) => <Chip key={t}>{t}</Chip>)}</div>
+        </Card>,
+      );
+    }
+  }
+  if (maxLen === 0 && (details?.interests?.length ?? 0) > 0) {
+    blocks.push(
+      <Card key="interests">
+        <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-muted"><Sparkles size={15} /> Interests</h3>
+        <div className="flex flex-wrap gap-2">{details!.interests.map((t) => <Chip key={t}>{t}</Chip>)}</div>
+      </Card>,
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-2 sm:px-6">
         <IconButton label="Back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}><ArrowLeft size={20} /></IconButton>
         <h1 className="truncate text-[15px] font-semibold text-ink">{isMe ? 'Your profile' : profile.display_name}</h1>
+        {isMe && !profile.is_public && (
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-muted"><Lock size={12} /> Private</span>
+        )}
       </header>
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-5 pb-16 pt-8 sm:px-8">
-          {/* Header */}
-          <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:text-left">
-            <button
-              onClick={() => isMe && setEditOpen(true)}
-              className={isMe ? 'relative rounded-full' : 'relative cursor-default rounded-full'}
-              aria-label={isMe ? 'Change profile picture' : 'Profile picture'}
-            >
-              <Avatar src={profile.avatar_url} name={profile.display_name} seed={profile.id} size={112} presence={presence} />
-            </button>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-2xl font-semibold tracking-tight text-ink">{profile.display_name}</h2>
-              <p className="mt-1 text-sm text-muted">
-                {statusLabel(presence)} · Joined {formatMonthYear(profile.created_at)}
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-                {isMe ? (
-                  <>
-                    <Button variant="secondary" size="sm" icon={<Pencil size={15} />} onClick={() => setEditOpen(true)}>Edit profile</Button>
-                    <Button variant="tonal" size="sm" icon={<ImagePlus size={15} />} onClick={() => picker.current?.click()}>Add photos</Button>
-                  </>
-                ) : blocked ? (
-                  <Button variant="secondary" size="sm" icon={<Ban size={15} />} onClick={unblock}>Unblock</Button>
-                ) : (
-                  <Button size="sm" icon={<MessageSquare size={15} />} loading={opening} onClick={message}>Message</Button>
-                )}
-                {!isMe && (
-                  <Menu
-                    align="left"
-                    trigger={(t) => (
-                      <button {...t} className="inline-flex size-8 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-surface-2" aria-label="More options">
-                        <MoreHorizontal size={17} />
-                      </button>
-                    )}
-                    items={[
-                      blocked
-                        ? { label: 'Unblock', icon: <Ban size={16} />, onSelect: unblock }
-                        : { label: 'Block', icon: <Ban size={16} />, danger: true, onSelect: () => setConfirm('block') },
-                      { label: 'Report', icon: <Flag size={16} />, danger: true, onSelect: () => setReporting(true) },
-                    ]}
-                  />
-                )}
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto bg-bg/50">
+        <div className="mx-auto max-w-xl space-y-4 px-4 pb-20 pt-6 sm:px-6">
+          {/* Hero photo */}
+          <div className="relative overflow-hidden rounded-3xl bg-surface-2">
+            {profile.avatar_url ? (
+              <button onClick={() => setViewer(0)} className="block w-full" aria-label="Open profile picture">
+                <img src={profile.avatar_url} alt={profile.display_name} className="aspect-[4/5] w-full object-cover" />
+              </button>
+            ) : (
+              <div className="flex aspect-[4/5] w-full items-center justify-center">
+                <Avatar name={profile.display_name} seed={profile.id} size={160} />
               </div>
+            )}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-6 pb-6 pt-24 text-white">
+              <h2 className="text-[30px] font-semibold leading-tight tracking-tight">
+                {profile.display_name}{age !== null && canView && <span className="font-normal">, {age}</span>}
+              </h2>
+              <p className="mt-1 flex items-center gap-2 text-sm text-white/85">
+                <PresenceDot presence={presence} className="border-white/70" />
+                {statusLabel(presence)}
+              </p>
             </div>
           </div>
 
-          {/* About */}
-          <section className="mt-9">
-            <h3 className="mb-2 text-[13px] font-semibold text-ink">About</h3>
-            {profile.description ? (
-              <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-ink">{profile.description}</p>
-            ) : isMe ? (
-              <button onClick={() => setEditOpen(true)} className="text-sm text-accent hover:underline">Add a description so people know a little about you</button>
-            ) : (
-              <p className="text-sm text-muted">{profile.display_name} has not written a description yet.</p>
-            )}
-          </section>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">{actions}</div>
 
-          {/* Photos */}
-          <section className="mt-9">
-            <div className="mb-3 flex items-baseline justify-between">
-              <h3 className="text-[13px] font-semibold text-ink">Photos <span className="font-normal text-muted">{photos.length > 0 && `· ${photos.length}`}</span></h3>
-            </div>
-            {photos.length === 0 ? (
-              isMe ? (
-                <button
-                  onClick={() => picker.current?.click()}
-                  className="flex w-full flex-col items-center rounded-2xl border border-dashed border-line-strong px-6 py-10 text-center hover:bg-surface-2"
-                >
-                  <Camera size={26} className="text-muted" />
-                  <span className="mt-2 text-sm font-medium text-ink">Share your first photos</span>
-                  <span className="mt-0.5 text-[13px] text-muted">Anyone who visits your profile can scroll through them.</span>
-                </button>
-              ) : (
-                <p className="text-sm text-muted">No photos yet.</p>
-              )
-            ) : (
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                {photos.map((p, i) => (
-                  <button key={p.id} onClick={() => setViewer(i)} className="group relative aspect-square overflow-hidden rounded-xl bg-surface-2">
-                    <img src={p.url} alt={p.caption || ''} loading="lazy" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-                    {p.caption && (
-                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-2 pt-6 text-left text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <span className="line-clamp-2">{p.caption}</span>
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
+          {!canView ? (
+            <Card className="text-center">
+              <Lock size={24} className="mx-auto text-muted" />
+              <h3 className="mt-3 text-[15px] font-semibold text-ink">This profile is private</h3>
+              <p className="mt-1 text-sm text-muted">{firstName} only shares their profile with people they are already chatting with.</p>
+            </Card>
+          ) : (
+            <>
+              {(details?.class_year || details?.major || details?.hometown || (details?.here_for?.length ?? 0) > 0) && (
+                <Card>
+                  <div className="flex flex-wrap gap-2">
+                    {details?.class_year && <Chip icon={<GraduationCap size={15} />}>{details.class_year}</Chip>}
+                    {details?.major && <Chip icon={<BookOpen size={15} />}>{details.major}</Chip>}
+                    {details?.hometown && <Chip icon={<MapPin size={15} />}>{details.hometown}</Chip>}
+                  </div>
+                  {(details?.here_for?.length ?? 0) > 0 && (
+                    <div className={cx(details?.class_year || details?.major || details?.hometown ? 'mt-5' : '')}>
+                      <h3 className="mb-2.5 text-[13px] font-semibold text-muted">Here for</h3>
+                      <div className="flex flex-wrap gap-2">{details!.here_for.map((h) => <Chip key={h} tone="accent">{h}</Chip>)}</div>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {profile.description ? (
+                <Card>
+                  <h3 className="mb-2 text-[13px] font-semibold text-muted">About {isMe ? 'me' : firstName}</h3>
+                  <p className="whitespace-pre-wrap break-words text-[16px] leading-relaxed text-ink">{profile.description}</p>
+                </Card>
+              ) : isMe ? (
+                <Link to="/profile/edit" className="block rounded-3xl border border-dashed border-line-strong p-6 text-center text-sm text-accent hover:bg-surface-2">
+                  Add an about section, prompts and more photos
+                </Link>
+              ) : null}
+
+              {blocks.map((b, i) => <Fragment key={i}>{b}</Fragment>)}
+
+              {isMe && photos.length === 0 && prompts.length === 0 && (
+                <Link to="/profile/edit" className="block rounded-3xl border border-dashed border-line-strong p-6 text-center text-sm text-accent hover:bg-surface-2">
+                  Add photos and answer a few prompts so people get to know you
+                </Link>
+              )}
+
+              {!isMe && <div className="flex justify-center pt-4">{actions}</div>}
+            </>
+          )}
         </div>
       </div>
 
-      <input ref={picker} type="file" accept={ACCEPT_ATTR} multiple hidden onChange={(e) => { choosePhotos(e.target.files); e.target.value = ''; }} />
-
-      <Lightbox
-        items={photos.map((p) => ({
-          src: p.url,
-          caption: p.caption,
-          meta: formatFullDate(p.created_at),
-          actions: isMe ? (
-            <button onClick={() => { setPhotoToDelete(p); setConfirm('photo'); }} className="rounded-full p-2 hover:bg-white/10" aria-label="Delete photo">
-              <Trash2 size={20} />
-            </button>
-          ) : undefined,
-        }))}
-        index={viewer}
-        onClose={() => setViewer(null)}
-        onIndexChange={setViewer}
-      />
-
-      {isMe && <EditProfileDialog open={editOpen} onClose={() => setEditOpen(false)} />}
-      {isMe && (
-        <UploadPhotosDialog
-          files={uploadFiles}
-          onClose={() => setUploadFiles([])}
-          onDone={() => { setUploadFiles([]); loadPhotos(); }}
-        />
-      )}
+      <Lightbox items={lightboxItems} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />
       <ConfirmDialog
-        open={confirm === 'block'}
-        onClose={() => setConfirm(null)}
+        open={confirmBlock}
+        onClose={() => setConfirmBlock(false)}
         title={`Block ${profile.display_name}?`}
         body="They will not be able to message you or add you to groups. They will not be told that you blocked them."
         confirmLabel="Block"
         danger
         onConfirm={block}
       />
-      <ConfirmDialog
-        open={confirm === 'photo'}
-        onClose={() => { setConfirm(null); setPhotoToDelete(null); }}
-        title="Delete this photo?"
-        body="It will be removed from your profile."
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => (photoToDelete ? deletePhoto(photoToDelete) : undefined)}
-      />
       {!isMe && <ReportDialog open={reporting} onClose={() => setReporting(false)} userId={profile.id} userName={profile.display_name} />}
     </div>
-  );
-}
-
-/* ---------------------------- Edit profile ---------------------------- */
-
-function EditProfileDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { profile, userId } = useMe();
-  const { updateProfile } = useAuth();
-  const toast = useToast();
-  const [name, setName] = useState(profile.display_name);
-  const [description, setDescription] = useState(profile.description);
-  const [avatar, setAvatar] = useState<string | null>(profile.avatar_url);
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
-  const filePreview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
-  useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview); }, [filePreview]);
-
-  useEffect(() => {
-    if (open) {
-      setName(profile.display_name);
-      setDescription(profile.description);
-      setAvatar(profile.avatar_url);
-      setFile(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  async function save() {
-    if (!name.trim()) return toast('Please enter a name.', 'error');
-    setBusy(true);
-    try {
-      let avatar_url = avatar;
-      if (file) avatar_url = (await uploadMedia(`users/${userId}/avatar`, file, 512)).url;
-      await updateProfile({ display_name: name.trim(), description: description.trim(), avatar_url });
-      const oldPath = mediaPathFromUrl(profile.avatar_url);
-      if (oldPath && avatar_url !== profile.avatar_url) removeMedia(oldPath);
-      toast('Profile saved', 'success');
-      onClose();
-    } catch (e) {
-      toast(errorMessage(e), 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Edit profile"
-      width={520}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Save</Button></>}
-    >
-      <div className="mb-6 flex items-center gap-5">
-        <button onClick={() => picker.current?.click()} className="group relative rounded-full" aria-label="Change profile picture">
-          <Avatar src={filePreview ?? avatar} name={name || profile.display_name} seed={userId} size={88} />
-          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <Camera size={22} />
-          </span>
-        </button>
-        <div className="flex flex-col items-start gap-1.5">
-          <Button size="sm" variant="secondary" icon={<Camera size={15} />} onClick={() => picker.current?.click()}>
-            {avatar || file ? 'Change picture' : 'Upload picture'}
-          </Button>
-          {(avatar || file) && (
-            <button className="text-xs font-medium text-danger hover:underline" onClick={() => { setAvatar(null); setFile(null); }}>Remove picture</button>
-          )}
-          <span className="text-xs text-muted">JPG, PNG, WebP or GIF.</span>
-        </div>
-        <input
-          ref={picker}
-          type="file"
-          accept={ACCEPT_ATTR}
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = '';
-            if (!f) return;
-            const problem = validateImage(f);
-            if (problem) return toast(problem, 'error');
-            setFile(f);
-          }}
-        />
-      </div>
-      <div className="space-y-4">
-        <Field label="Name" hint="This is how you appear to everyone.">
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
-        </Field>
-        <Field label="Description" counter={`${description.length}/${MAX_DESCRIPTION_LENGTH}`}>
-          <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={MAX_DESCRIPTION_LENGTH} placeholder="Tell people a little about yourself" />
-        </Field>
-      </div>
-    </Modal>
-  );
-}
-
-/* ---------------------------- Upload photos ---------------------------- */
-
-function UploadPhotosDialog({ files, onClose, onDone }: { files: File[]; onClose: () => void; onDone: () => void }) {
-  const { userId } = useMe();
-  const toast = useToast();
-  const [captions, setCaptions] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
-  useEffect(() => { setCaptions(files.map(() => '')); setProgress(0); }, [files]);
-
-  async function post() {
-    setBusy(true);
-    let done = 0;
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const { path, url } = await uploadMedia(`users/${userId}/photos`, files[i], 2000);
-        const { error } = await supabase.from('profile_photos').insert({ user_id: userId, storage_path: path, url, caption: (captions[i] ?? '').trim() });
-        if (error) throw error;
-        done++;
-        setProgress(done);
-      }
-      toast(`${plural(done, 'photo')} added to your profile`, 'success');
-      onDone();
-    } catch (e) {
-      toast(errorMessage(e), 'error');
-      if (done > 0) onDone();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal
-      open={files.length > 0}
-      onClose={busy ? () => {} : onClose}
-      title={`Add ${plural(files.length, 'photo')}`}
-      width={560}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button onClick={post} loading={busy}>{busy ? `Uploading ${progress + 1} of ${files.length}` : 'Post to profile'}</Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {files.map((f, i) => (
-          <div key={f.name + i} className="flex gap-3">
-            <img src={previews[i]} alt="" className="size-20 shrink-0 rounded-lg border border-line object-cover" />
-            <Textarea
-              rows={3}
-              value={captions[i] ?? ''}
-              onChange={(e) => setCaptions((c) => c.map((x, j) => (j === i ? e.target.value : x)))}
-              maxLength={300}
-              placeholder="Write a caption (optional)"
-            />
-          </div>
-        ))}
-      </div>
-    </Modal>
   );
 }

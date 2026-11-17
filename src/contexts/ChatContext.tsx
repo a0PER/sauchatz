@@ -14,6 +14,10 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void;
   markReadLocally: (id: string) => void;
   setMutedLocally: (id: string, muted: boolean) => void;
+  setLockedLocally: (id: string, locked: boolean) => void;
+  isUnlocked: (id: string) => boolean;
+  markUnlocked: (id: string) => void;
+  relock: (id?: string) => void;
 }
 
 const ChatContext = createContext<ChatState | null>(null);
@@ -46,6 +50,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id;
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Locked chats opened with the PIN during this visit. Cleared on reload or after 2 minutes away.
+  const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const navRef = useRef(navigate);
   navRef.current = navigate;
@@ -95,8 +101,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (prefs?.notify_desktop && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
         const sender = m.sender_id ? await getProfile(m.sender_id) : null;
         const title = conv?.type === 'group' ? `${sender?.display_name ?? 'Someone'} in ${conv.name}` : sender?.display_name ?? APP_NAME;
-        const n = new Notification(title, {
-          body: m.deleted_at ? '' : m.body || 'Sent a photo',
+        const n = new Notification(conv?.locked ? 'Sauchatz' : title, {
+          body: conv?.locked ? 'New message in a locked chat' : m.deleted_at ? '' : m.body || 'Sent a photo',
           icon: sender?.avatar_url || `${import.meta.env.BASE_URL}favicon.svg`,
           tag: m.conversation_id,
         });
@@ -144,9 +150,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const setMutedLocally = useCallback((id: string, muted: boolean) =>
     setConversations((list) => list.map((c) => (c.id === id ? { ...c, muted } : c))), []);
 
+  const setLockedLocally = useCallback((id: string, locked: boolean) =>
+    setConversations((list) => list.map((c) => (c.id === id ? { ...c, locked } : c))), []);
+  const isUnlocked = useCallback((id: string) => unlocked.has(id), [unlocked]);
+  const markUnlocked = useCallback((id: string) => setUnlocked((s) => new Set(s).add(id)), []);
+  const relock = useCallback((id?: string) => setUnlocked((s) => {
+    if (!id) return s.size ? new Set() : s;
+    const n = new Set(s);
+    n.delete(id);
+    return n;
+  }), []);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const onVis = () => {
+      window.clearTimeout(timer);
+      if (document.hidden) timer = window.setTimeout(() => relock(), 2 * 60 * 1000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearTimeout(timer); };
+  }, [relock]);
+
   const value = useMemo<ChatState>(() => ({
     conversations, loaded, totalUnread, refresh, setActiveConversation, markReadLocally, setMutedLocally,
-  }), [conversations, loaded, totalUnread, refresh, setActiveConversation, markReadLocally, setMutedLocally]);
+    setLockedLocally, isUnlocked, markUnlocked, relock,
+  }), [conversations, loaded, totalUnread, refresh, setActiveConversation, markReadLocally, setMutedLocally, setLockedLocally, isUnlocked, markUnlocked, relock]);
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

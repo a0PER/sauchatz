@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import {
-  BellOff, ChevronDown, Image as ImageIcon, LogOut, MessageSquarePlus, Plus, Search, Settings, SquarePen,
+  BellOff, ChevronDown, Image as ImageIcon, Lock, LogOut, ShieldCheck, MessageSquarePlus, Plus, Search, Settings, SquarePen,
   User, Users, UsersRound, X,
 } from 'lucide-react';
 import { APP_NAME } from '../config';
@@ -62,8 +62,8 @@ export default function AppShell() {
 const STATUSES: Status[] = ['active', 'away', 'dnd'];
 
 function TopBar() {
-  const { profile, email, userId } = useMe();
-  const { updateProfile, signOut } = useAuth();
+  const { profile, phone, userId } = useMe();
+  const { updateProfile, signOut, isAdmin } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -117,7 +117,7 @@ function TopBar() {
               <Avatar src={profile.avatar_url} name={profile.display_name} seed={userId} size={40} />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-ink">{profile.display_name}</div>
-                <div className="truncate text-xs text-muted">{email}</div>
+                <div className="truncate text-xs text-muted">{phone}</div>
               </div>
             </div>
           }
@@ -130,7 +130,9 @@ function TopBar() {
               divider: i === 0,
               onSelect: () => setStatus(s),
             })),
+            { label: 'Edit profile', icon: <SquarePen size={17} />, onSelect: () => navigate('/profile/edit') },
             { label: 'Settings', icon: <Settings size={17} />, divider: true, onSelect: () => navigate('/settings') },
+            ...(isAdmin ? [{ label: 'Admin', icon: <ShieldCheck size={17} />, onSelect: () => navigate('/admin') }] : []),
             { label: 'Sign out', icon: <LogOut size={17} />, onSelect: () => signOut() },
           ]}
         />
@@ -159,6 +161,7 @@ function GlobalSearch() {
         .from('profiles')
         .select('*')
         .ilike('display_name', `%${term.replace(/[%_]/g, '')}%`)
+        .eq('is_public', true)
         .neq('id', userId)
         .order('display_name')
         .limit(6);
@@ -316,7 +319,9 @@ function ConversationItem({ c }: { c: ConversationSummary }) {
   const title = conversationTitle(c);
 
   let preview: ReactNode = c.type === 'group' ? `${c.member_count} members` : 'Say hello';
-  if (c.last_sender_id || c.last_body !== null) {
+  if (c.locked) {
+    preview = <span className="inline-flex items-center gap-1"><Lock size={12} /> Locked chat</span>;
+  } else if (c.last_sender_id || c.last_body !== null) {
     const who = c.last_sender_id === userId ? 'You' : c.type === 'group' ? c.last_sender_name?.split(' ')[0] : null;
     const body = c.last_deleted ? 'Message deleted' : c.last_body || (c.last_has_image ? 'Photo' : '');
     preview = (

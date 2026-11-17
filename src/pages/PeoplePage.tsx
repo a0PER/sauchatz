@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Users } from 'lucide-react';
+import { ArrowLeft, Lock, Search, Users } from 'lucide-react';
 import { useMe } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
 import { statusLabel } from '../lib/format';
@@ -20,7 +20,7 @@ export default function PeoplePage() {
   const [hasMore, setHasMore] = useState(false);
 
   async function load(offset: number, q: string) {
-    let query = supabase.from('profiles').select('*').neq('id', userId).order('display_name').range(offset, offset + PAGE - 1);
+    let query = supabase.from('profiles').select('*').eq('is_public', true).neq('id', userId).order('display_name').range(offset, offset + PAGE - 1);
     const clean = q.trim().replace(/[%_]/g, '');
     if (clean) query = query.ilike('display_name', `%${clean}%`);
     const { data } = await query;
@@ -57,10 +57,14 @@ export default function PeoplePage() {
         </div>
       </header>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <p className="mb-4 flex items-center gap-2 text-[13px] text-muted">
+          <Lock size={14} className="shrink-0" />
+          Only public profiles are shown. People with private profiles can still chat with you if they message you first.
+        </p>
         {loading ? (
           <div className="flex justify-center py-16"><Spinner size={24} /></div>
         ) : sorted.length === 0 ? (
-          <EmptyState icon={<Users size={26} />} title={term ? 'No one matches that name' : 'No one else is here yet'} body={term ? 'Try a different spelling.' : 'Invite friends to sign up and they will show up here.'} />
+          <EmptyState icon={<Users size={26} />} title={term ? 'No one matches that name' : 'No public profiles yet'} body={term ? 'Try a different spelling.' : 'Invite friends to sign up and they will show up here.'} />
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
