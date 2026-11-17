@@ -236,8 +236,8 @@ export default function EditProfilePage() {
 
           <Section title="The basics" description="Choose who sees each item. Your exact birthday is never shown, only your age.">
             <div className="space-y-4">
-              <Field label="Name">
-                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+              <Field label="Name" hint={profile.name_locked ? 'Your name was set by an admin and cannot be changed.' : undefined}>
+                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} disabled={profile.name_locked} />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>

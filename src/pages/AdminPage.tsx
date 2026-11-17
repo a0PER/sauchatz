@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Flag, KeyRound, Lock, Search, ShieldAlert, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Flag, KeyRound, PenLine, Lock, Search, ShieldAlert, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatFullDate, formatListTime } from '../lib/format';
 import { formatPhone, loginToPhone } from '../lib/phone';
 import { errorMessage, supabase } from '../lib/supabase';
-import { Avatar, Button, EmptyState, Field, IconButton, Input, Modal, Spinner, cx } from '../components/ui';
+import { Avatar, Button, EmptyState, Field, IconButton, Input, Modal, Spinner, Toggle, cx } from '../components/ui';
 import { ConfirmDialog } from '../components/Dialogs';
 
 interface AdminUser {
@@ -49,6 +49,7 @@ export default function AdminPage() {
   const [term, setTerm] = useState('');
   const [deleting, setDeleting] = useState<AdminUser | { id: string; display_name: string | null } | null>(null);
   const [resetting, setResetting] = useState<AdminUser | null>(null);
+  const [renaming, setRenaming] = useState<AdminUser | null>(null);
 
   const load = useCallback(async () => {
     const [u, r] = await Promise.all([supabase.rpc('admin_list_users'), supabase.rpc('admin_list_reports')]);
@@ -173,6 +174,7 @@ export default function AdminPage() {
                         </td>
                         <td className="ml-auto md:px-4 md:py-3">
                           <div className="flex justify-end gap-1">
+                            <IconButton label="Change name" size={32} onClick={() => setRenaming(u)}><PenLine size={16} /></IconButton>
                             <IconButton label="Set a new password" size={32} onClick={() => setResetting(u)}><KeyRound size={16} /></IconButton>
                             {u.id !== userId && (
                               <IconButton label="Delete account" size={32} className="hover:text-danger" onClick={() => setDeleting(u)}><Trash2 size={16} /></IconButton>
@@ -236,7 +238,57 @@ export default function AdminPage() {
         onConfirm={confirmDelete}
       />
       <SetPasswordDialog user={resetting} onClose={() => setResetting(null)} />
+      <RenameDialog user={renaming} onClose={() => setRenaming(null)} onSaved={load} />
     </div>
+  );
+}
+
+function RenameDialog({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [lock, setLock] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (user) {
+      setName(user.display_name ?? '');
+      setLock(true);
+    }
+  }, [user]);
+
+  async function save() {
+    if (!user) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('admin_set_display_name', { p_user: user.id, p_name: name.trim(), p_lock: lock });
+    setBusy(false);
+    if (error) return toast(errorMessage(error), 'error');
+    toast(`Name changed to ${name.trim()}${lock ? ' and locked' : ''}`, 'success');
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal
+      open={Boolean(user)}
+      onClose={onClose}
+      title={`Change name for ${user?.display_name ?? 'this account'}`}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy} disabled={!name.trim()}>Save name</Button></>}
+    >
+      <p className="mb-4 text-sm text-muted">
+        Use this when a name is offensive, impersonates someone, or shares private information. Everyone sees the new name right away.
+      </p>
+      <div className="space-y-4">
+        <Field label="New name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus />
+        </Field>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm text-ink">Lock this name</div>
+            <div className="text-xs text-muted">They cannot change it back until you turn this off by renaming again.</div>
+          </div>
+          <Toggle checked={lock} onChange={setLock} label="Lock this name" />
+        </div>
+      </div>
+    </Modal>
   );
 }
 

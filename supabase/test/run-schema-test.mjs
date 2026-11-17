@@ -301,6 +301,18 @@ if (hearts.rows.length === 1) ok('you can see who sent you a heart'); else bad('
 const hd = await as(D, `select count(*)::int n from profile_hearts where to_user = '${A}'`);
 if (hd.rows[0].n === 0) ok('others cannot see who hearted someone'); else bad('heart leak');
 
+console.log('\nAdmin name changes');
+await expectFail('non-admin cannot rename people', B, `select admin_set_display_name('${D}', 'Hacked')`);
+await expectOk('admin renames someone and locks it', A, `select admin_set_display_name('${D}', 'Safe Name', true)`);
+const rn = (await as(D, `select display_name, name_locked from profiles where id = '${D}'`)).rows[0];
+if (rn.display_name === 'Safe Name' && rn.name_locked) ok('new name saved and locked'); else bad('rename', JSON.stringify(rn));
+await expectFail('they cannot change a locked name back', D, `update profiles set display_name = 'Bad Name' where id = '${D}'`);
+await expectOk('they can still edit their bio', D, `update profiles set description = 'hi' where id = '${D}'`);
+await expectFail('they cannot unlock it themselves', D, `update profiles set name_locked = false where id = '${D}'`);
+await expectOk('admin unlocks', A, `select admin_set_display_name('${D}', 'Safe Name', false)`);
+await expectOk('after unlock they can rename', D, `update profiles set display_name = 'Dana' where id = '${D}'`);
+await expectFail('empty names are refused', A, `select admin_set_display_name('${D}', '   ')`);
+
 console.log('\nEmail verification');
 const X = D;
 const ev0 = (await as(X, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;

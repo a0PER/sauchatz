@@ -15,6 +15,8 @@ export interface Profile {
   show_hearts?: boolean;
   /** True once the person opened a link sent to their email. */
   email_verified?: boolean;
+  /** Set by an admin; the person cannot change their name. */
+  name_locked?: boolean;
   created_at: string;
   updated_at: string;
 }
