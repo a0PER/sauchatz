@@ -296,27 +296,6 @@ if (hidden === null && ownHearts === 1) ok('hidden heart count only visible to t
 const whoSent = await as(D, `select count(*)::int n from profile_hearts`);
 if (whoSent.rows[0].n === 0) ok('nobody can see who sent other people hearts'); else bad('heart list leak');
 
-console.log('\nTest account admin tools');
-const T = '00000000-0000-0000-0000-0000000000ee';
-await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${T}', 'testguy1@test.sauchatz.app', '{"display_name":"Test Guy 1"}')`);
-const tp = await db.query(`select is_test from profiles where id = '${T}'`);
-if (tp.rows[0].is_test) ok('test account is flagged automatically'); else bad('not flagged');
-const g2 = (await as(A, `select create_group('Testers', '', array['${T}']::uuid[]) id`)).rows[0].id;
-await db.exec(`insert into messages (conversation_id, sender_id, body) values ('${g2}', '${T}', 'from test'), ('${g2}', '${A}', 'from a real person')`);
-const tm = await expectOk('admin lists test messages', A, `select * from admin_list_test_messages()`);
-if (tm && tm.rows.length === 1 && tm.rows[0].body === 'from test') ok('only messages sent by test accounts are shown'); else bad('test messages', JSON.stringify(tm?.rows));
-const tmid = tm.rows[0].id;
-await expectOk('admin edits a test message', A, `select admin_edit_test_message('${tmid}', 'edited by admin')`);
-const realId = (await db.query(`select id from messages where body = 'from a real person'`)).rows[0].id;
-await expectFail('admin cannot edit a real person message', A, `select admin_edit_test_message('${realId}', 'hacked')`);
-await expectOk('admin edits test profile', A, `select admin_update_test_profile('${T}', 'Guy Renamed', 'bio', true)`);
-const tn = await db.query(`select display_name from profiles where id = '${T}'`);
-if (tn.rows[0].display_name === 'Test Guy Renamed') ok('test names always keep the Test prefix'); else bad('prefix', tn.rows[0].display_name);
-await expectFail('admin cannot edit a real profile with test tools', A, `select admin_update_test_profile('${B}', 'x', 'y', true)`);
-await expectFail('non-admin cannot use test tools', B, `select * from admin_list_test_messages()`);
-const flagHack = await as(B, `update profiles set is_test = true where id = '${B}' returning id`).catch(() => 'blocked');
-if (flagHack === 'blocked') ok('people cannot mark themselves as test accounts'); else bad('is_test editable');
-
 const hearts = await as(A, `select from_user from profile_hearts where to_user = '${A}'`);
 if (hearts.rows.length === 1) ok('you can see who sent you a heart'); else bad('received hearts', hearts.rows.length);
 const hd = await as(D, `select count(*)::int n from profile_hearts where to_user = '${A}'`);
@@ -343,6 +322,19 @@ console.log('\nAccount deletion');
 await expectOk('Bob deletes his account', B, 'select delete_my_account()');
 const gone = await db.query(`select count(*)::int n from conversations where id = '${gid}'`);
 if (gone.rows[0].n === 0) ok('his now-empty group was cleaned up'); else bad('group left behind');
+
+console.log('\nUpgrade 9 on an existing database');
+const T = '00000000-0000-0000-0000-0000000000ee';
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${T}', 'testguy1@test.sauchatz.app', '{"display_name":"Test Guy 1"}')`);
+await db.exec(`alter table public.profiles add column if not exists is_test boolean not null default false`);
+try {
+  await db.exec(readFileSync(path.join(here, '..', 'upgrade-009.sql'), 'utf8'));
+  await db.exec(readFileSync(path.join(here, '..', 'upgrade-009.sql'), 'utf8'));
+  ok('upgrade-009 runs, and can be run twice');
+} catch (e) { bad('upgrade-009', e.message); }
+const leftover = (await db.query(`select count(*)::int n from profiles where id = '${T}'`)).rows[0].n;
+const col = (await db.query(`select count(*)::int n from information_schema.columns where table_name = 'profiles' and column_name = 'is_test'`)).rows[0].n;
+if (leftover === 0 && col === 0) ok('test accounts and the test flag are removed'); else bad('cleanup', `${leftover} ${col}`);
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll checks passed.');
 process.exit(failures ? 1 : 0);

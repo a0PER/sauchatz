@@ -4,7 +4,7 @@ import { Copy, Flag, Lock, Pencil, Plus, SmilePlus, Trash2 } from 'lucide-react'
 import { formatTime } from '../../lib/format';
 import { getChatImageUrl } from '../../lib/images';
 import type { Message, Profile } from '../../lib/types';
-import { Avatar, Button, Spinner, TestBadge, Textarea, cx } from '../ui';
+import { Avatar, Button, Spinner, Textarea, cx } from '../ui';
 import { EmojiPicker, isEmojiOnly } from './EmojiPicker';
 
 export interface ReactionSummary { emoji: string; count: number; mine: boolean; names: string[] }
@@ -209,7 +209,7 @@ function MessageItemInner({
         )}
         <div className={cx('flex min-w-0 max-w-[78%] flex-col sm:max-w-[65%]', mine ? 'items-end' : 'items-start')}>
           {!mine && !compact && showName && (
-            <span className="mb-0.5 ml-3 flex items-center gap-1.5 text-xs font-medium text-muted">{name}{sender?.is_test && <TestBadge />}</span>
+            <span className="mb-0.5 ml-3 flex items-center gap-1.5 text-xs font-medium text-muted">{name}</span>
           )}
           {deleted ? (
             <p className="rounded-2xl border border-line px-3.5 py-2 text-sm italic text-subtle">This message was deleted</p>
@@ -268,7 +268,6 @@ function MessageItemInner({
             ) : (
               <span className="text-sm font-semibold text-muted">{name}</span>
             )}
-            {sender?.is_test && <TestBadge />}
             <span className="text-xs text-subtle">{formatTime(m.created_at)}</span>
           </div>
         )}

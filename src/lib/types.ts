@@ -12,7 +12,6 @@ export interface Profile {
   allow_messages_from: 'everyone' | 'nobody';
   show_read_receipts: boolean;
   is_public: boolean;
-  is_test?: boolean;
   show_hearts?: boolean;
   /** True once the person opened a link sent to their email. */
   email_verified?: boolean;

@@ -27,7 +27,7 @@ const ITEM_LABELS: Record<string, string> = {
   age: 'Age', class_year: 'Class year', major: 'Major', hometown: 'Hometown', here_for: 'Here for',
   interests: 'Interests', prompts: 'Prompts', photos: 'Photos',
 };
-import { Avatar, Button, EmptyState, IconButton, Menu, PresenceDot, Spinner, TestBadge, cx } from '../components/ui';
+import { Avatar, Button, EmptyState, IconButton, Menu, PresenceDot, Spinner, cx } from '../components/ui';
 import { ConfirmDialog, ReportDialog } from '../components/Dialogs';
 import { Lightbox } from '../components/Lightbox';
 
@@ -279,7 +279,6 @@ export default function ProfilePage() {
             <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-6 pb-6 pt-24 text-white">
               <h2 className="text-[30px] font-semibold leading-tight tracking-tight">
                 {profile.display_name}{age !== null && canView && <span className="font-normal">, {age}</span>}
-                {profile.is_test && <TestBadge className="ml-2 bg-white/85 text-[11px]" />}
               </h2>
               <p className="mt-1 flex items-center gap-2 text-sm text-white/85">
                 <PresenceDot presence={presence} className="border-white/70" />

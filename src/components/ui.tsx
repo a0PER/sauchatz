@@ -359,11 +359,3 @@ export function SectionLabel({ children, action }: { children: ReactNode; action
   );
 }
 
-/** Marks accounts that are for testing only, so nobody mistakes them for real students. */
-export function TestBadge({ className }: { className?: string }) {
-  return (
-    <span className={cx('inline-flex shrink-0 items-center rounded-md bg-warning/20 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-ink', className)}>
-      Test
-    </span>
-  );
-}

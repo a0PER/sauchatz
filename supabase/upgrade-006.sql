@@ -1,5 +1,5 @@
 -- Version 6: invite links for groups, and adding private profiles you already chat with.
--- Run once in Supabase SQL Editor, after upgrade-005.sql.
+-- Run once in Supabase SQL Editor, after upgrade-004.sql.
 
 -- ---------- Who can be added to a group ----------
 -- Public profiles, or private profiles you already share a conversation with.

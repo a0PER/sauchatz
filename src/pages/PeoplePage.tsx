@@ -6,7 +6,7 @@ import { usePresence } from '../contexts/PresenceContext';
 import { statusLabel } from '../lib/format';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../lib/types';
-import { Avatar, EmptyState, IconButton, Input, PresenceDot, Spinner, TestBadge } from '../components/ui';
+import { Avatar, EmptyState, IconButton, Input, PresenceDot, Spinner } from '../components/ui';
 
 const PAGE = 60;
 
@@ -81,7 +81,6 @@ export default function PeoplePage() {
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-3.5 pb-3 pt-10 text-white">
                         <div className="flex items-center gap-1.5 truncate text-[15px] font-semibold">
                           {p.display_name}
-                          {p.is_test && <TestBadge className="bg-white/85" />}
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-white/85">
                           <PresenceDot presence={presence} className="border-white/70" />
