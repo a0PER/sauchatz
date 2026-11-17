@@ -32,3 +32,6 @@ end;
 $$;
 revoke execute on function public.admin_set_display_name(uuid, text, boolean) from public, anon;
 grant execute on function public.admin_set_display_name(uuid, text, boolean) to authenticated;
+
+-- Make the new function available to the website right away.
+notify pgrst, 'reload schema';
