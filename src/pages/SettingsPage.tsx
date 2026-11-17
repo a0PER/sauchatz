@@ -5,7 +5,8 @@ import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { statusLabel } from '../lib/format';
-import { errorMessage, supabase } from '../lib/supabase';
+import { errorMessage, siteUrl, supabase } from '../lib/supabase';
+import { formatAsTyped, formatPhone, normalizePhone } from '../lib/phone';
 import type { Profile, Status, Theme } from '../lib/types';
 import { Avatar, Button, Field, IconButton, Input, PresenceDot, Spinner, Toggle, cx } from '../components/ui';
 import { ConfirmDialog } from '../components/Dialogs';
@@ -115,9 +116,38 @@ function RadioCards<T extends string>({ value, onChange, options }: { value: T; 
 /* ------------------------------ Account ------------------------------ */
 
 function AccountSection() {
-  const { phone } = useMe();
-  const { signOut } = useAuth();
+  const { email } = useMe();
+  const { signOut, settings, updateSettings } = useAuth();
   const toast = useToast();
+  const [newEmail, setNewEmail] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [phone, setPhone] = useState(settings?.phone ? formatPhone(settings.phone) : '');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+
+  async function changeEmail(e: FormEvent) {
+    e.preventDefault();
+    setEmailBusy(true);
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() }, { emailRedirectTo: siteUrl() });
+    setEmailBusy(false);
+    if (error) return toast(errorMessage(error), 'error');
+    setNewEmail('');
+    toast('Check both inboxes to confirm the change.', 'success');
+  }
+
+  async function savePhone(e: FormEvent) {
+    e.preventDefault();
+    const digits = phone.trim() ? normalizePhone(phone) : null;
+    if (phone.trim() && !digits) return toast('That phone number does not look right.', 'error');
+    setPhoneBusy(true);
+    try {
+      await updateSettings({ phone: digits });
+      toast(digits ? 'Phone number saved' : 'Phone number removed', 'success');
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
@@ -145,9 +175,26 @@ function AccountSection() {
 
   return (
     <>
-      <Card title="Phone number" description="You sign in with this number. It is never shown to other members.">
-        <p className="text-[15px] font-medium text-ink">{phone}</p>
-        <p className="mt-1 text-[13px] text-muted">To change your number, contact the Sauchatz admin.</p>
+      <Card title="Email address" description={<>You sign in with <span className="font-medium text-ink">{email}</span>. It is never shown to other members.</>}>
+        <form onSubmit={changeEmail} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Field label="New email">
+              <Input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} autoComplete="email" />
+            </Field>
+          </div>
+          <Button type="submit" variant="secondary" loading={emailBusy} disabled={!newEmail.trim()}>Change email</Button>
+        </form>
+      </Card>
+
+      <Card title="Phone number (optional)" description="Private. Only you and the site admin can see it.">
+        <form onSubmit={savePhone} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Field label="Phone">
+              <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(formatAsTyped(e.target.value))} placeholder="(423) 555-0134" autoComplete="tel" />
+            </Field>
+          </div>
+          <Button type="submit" variant="secondary" loading={phoneBusy}>{phone.trim() ? 'Save' : 'Remove'}</Button>
+        </form>
       </Card>
 
       <Card title="Password">

@@ -4,7 +4,7 @@ import { ArrowLeft, Flag, KeyRound, Lock, Search, ShieldAlert, ShieldCheck, Tras
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatFullDate, formatListTime } from '../lib/format';
-import { loginToPhone } from '../lib/phone';
+import { formatPhone, loginToPhone } from '../lib/phone';
 import { errorMessage, supabase } from '../lib/supabase';
 import { Avatar, Button, EmptyState, Field, IconButton, Input, Modal, Spinner, cx } from '../components/ui';
 import { ConfirmDialog } from '../components/Dialogs';
@@ -12,6 +12,8 @@ import { ConfirmDialog } from '../components/Dialogs';
 interface AdminUser {
   id: string;
   login: string;
+  phone: string | null;
+  email_confirmed: boolean;
   display_name: string | null;
   avatar_url: string | null;
   is_public: boolean | null;
@@ -61,7 +63,7 @@ export default function AdminPage() {
     const t = term.trim().toLowerCase();
     const digits = t.replace(/\D/g, '');
     if (!users || !t) return users ?? [];
-    return users.filter((u) => (u.display_name ?? '').toLowerCase().includes(t) || (digits.length >= 3 && u.login.includes(digits)) || u.login.toLowerCase().includes(t));
+    return users.filter((u) => (u.display_name ?? '').toLowerCase().includes(t) || (digits.length >= 3 && (u.phone ?? '').includes(digits)) || u.login.toLowerCase().includes(t));
   }, [users, term]);
 
   if (!isAdmin) {
@@ -121,7 +123,7 @@ export default function AdminPage() {
           <>
             <div className="relative mb-4 max-w-sm">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle" />
-              <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Search by name or phone" className="h-10 rounded-full pl-9" />
+              <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Search by name, email or phone" className="h-10 rounded-full pl-9" />
             </div>
             {users === null ? (
               <div className="flex justify-center py-12"><Spinner size={24} /></div>
@@ -133,7 +135,7 @@ export default function AdminPage() {
                   <thead className="hidden bg-surface-2 text-xs font-medium text-muted md:table-header-group">
                     <tr>
                       <th className="px-4 py-2.5">Member</th>
-                      <th className="px-4 py-2.5">Phone</th>
+                      <th className="px-4 py-2.5">Email and phone</th>
                       <th className="px-4 py-2.5">Joined</th>
                       <th className="px-4 py-2.5">Last sign-in</th>
                       <th className="px-4 py-2.5 text-right">Messages</th>
@@ -156,7 +158,13 @@ export default function AdminPage() {
                             </span>
                           </Link>
                         </td>
-                        <td className="font-mono text-[13px] text-ink md:px-4 md:py-3">{loginToPhone(u.login)}</td>
+                        <td className="text-[13px] md:px-4 md:py-3">
+                          <span className="block text-ink">{loginToPhone(u.login)}</span>
+                          <span className="block text-muted">
+                            {u.phone ? formatPhone(u.phone) : 'No phone'}
+                            {!u.email_confirmed && <span className="ml-2 font-medium text-warning">Not verified</span>}
+                          </span>
+                        </td>
                         <td className="text-[13px] text-muted md:px-4 md:py-3" title={formatFullDate(u.created_at)}>{formatListTime(u.created_at)}</td>
                         <td className="text-[13px] text-muted md:px-4 md:py-3">{u.last_sign_in_at ? formatListTime(u.last_sign_in_at) : 'Never'}</td>
                         <td className="text-[13px] text-ink md:px-4 md:py-3 md:text-right">{u.message_count}<span className="text-muted md:hidden"> messages</span></td>

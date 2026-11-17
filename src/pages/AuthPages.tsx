@@ -1,9 +1,9 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, KeyRound, Lock, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Lock, MailCheck, ShieldCheck } from 'lucide-react';
 import { APP_NAME } from '../config';
-import { errorMessage, supabase } from '../lib/supabase';
-import { formatAsTyped, normalizePhone, phoneToLogin } from '../lib/phone';
+import { errorMessage, siteUrl, supabase } from '../lib/supabase';
+import { formatAsTyped, normalizePhone } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Field, Input, Logo } from '../components/ui';
 
@@ -16,7 +16,7 @@ function TrustNotes() {
       </p>
       <p className="flex gap-2.5">
         <ShieldCheck size={16} className="mt-0.5 shrink-0 text-success" />
-        <span><span className="font-medium text-ink">Your phone number is never shown</span> to other members. Everything is sent over a secure, encrypted connection.</span>
+        <span><span className="font-medium text-ink">Your email and phone number are never shown</span> to other members. Everything is sent over a secure, encrypted connection.</span>
       </p>
     </div>
   );
@@ -70,40 +70,40 @@ function PasswordInput(props: { value: string; onChange: (v: string) => void; au
   );
 }
 
-function PhoneInput({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
-  return (
-    <Input
-      type="tel"
-      inputMode="tel"
-      required
-      autoComplete="tel"
-      placeholder="(423) 555-0134"
-      value={value}
-      onChange={(e) => onChange(formatAsTyped(e.target.value))}
-      autoFocus={autoFocus}
-    />
-  );
-}
-
 function ErrorBox({ text }: { text: string }) {
   return <div className="mb-4 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger">{text}</div>;
 }
 
+function CheckInbox({ email, what }: { email: string; what: string }) {
+  return (
+    <div className="flex flex-col items-start">
+      <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-accent-soft text-on-accent-soft">
+        <MailCheck size={24} />
+      </div>
+      <p className="text-sm text-ink">
+        We sent a link to <span className="font-medium">{email}</span>. Open it to {what}.
+      </p>
+      <p className="mt-2 text-[13px] text-muted">If you do not see it within a few minutes, check your spam folder.</p>
+      <Link to="/login" className="mt-6 text-sm font-medium text-accent hover:underline">Back to sign in</Link>
+    </div>
+  );
+}
+
 export function SignInPage() {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const digits = normalizePhone(phone);
-    if (!digits) return setError('Enter a valid phone number.');
     setBusy(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email: phoneToLogin(digits), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
-    if (error) setError(/invalid login/i.test(error.message) ? 'That phone number and password do not match.' : errorMessage(error));
+    if (error) {
+      setError(/invalid login/i.test(error.message) ? 'That email and password do not match.' : /not confirmed/i.test(error.message) ? 'Please verify your email first. Check your inbox for the link.' : errorMessage(error));
+    }
   }
 
   return (
@@ -114,8 +114,8 @@ export function SignInPage() {
     >
       <form onSubmit={submit} className="space-y-4">
         {error && <ErrorBox text={error} />}
-        <Field label="Phone number">
-          <PhoneInput value={phone} onChange={setPhone} autoFocus />
+        <Field label="Email">
+          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
         </Field>
         <Field label="Password">
           <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
@@ -131,37 +131,45 @@ export function SignInPage() {
 
 export function SignUpPage() {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [agree, setAgree] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const digits = normalizePhone(phone);
     if (!name.trim()) return setError('Please enter your name.');
-    if (!digits) return setError('Enter a valid phone number.');
+    const digits = phone.trim() ? normalizePhone(phone) : null;
+    if (phone.trim() && !digits) return setError('That phone number does not look right. You can also leave it empty.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
     if (!agree) return setError('Please confirm you are a current SAU student and 18 or older.');
     setBusy(true);
     setError('');
     const { data, error } = await supabase.auth.signUp({
-      email: phoneToLogin(digits),
+      email: email.trim(),
       password,
-      options: { data: { display_name: name.trim() } },
+      options: { emailRedirectTo: siteUrl(), data: { display_name: name.trim(), ...(digits ? { phone: digits } : {}) } },
     });
     setBusy(false);
-    if (error) {
-      return setError(/already registered|already exists/i.test(error.message) ? 'An account with that phone number already exists. Try signing in.' : errorMessage(error));
-    }
-    if (!data.session) setError('Your account was created, but sign-in is waiting on a setting. Ask the site admin to turn off email confirmation.');
+    if (error) return setError(errorMessage(error));
+    if (!data.session) setSent(true);
+  }
+
+  if (sent) {
+    return (
+      <AuthCard title="Verify your email" notes={false}>
+        <CheckInbox email={email} what="verify your email and finish creating your account" />
+      </AuthCard>
+    );
   }
 
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Your phone number stays private. People only see your profile."
+      subtitle="Your email and phone stay private. People only see your profile."
       footer={<>Already have an account? <Link to="/login" className="font-medium text-accent hover:underline">Sign in</Link></>}
     >
       <form onSubmit={submit} className="space-y-4">
@@ -169,10 +177,13 @@ export function SignUpPage() {
         <Field label="Your name" hint="This is what everyone sees.">
           <Input required maxLength={60} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
-        <Field label="Phone number" hint="Used only to sign in. No texts are sent.">
-          <PhoneInput value={phone} onChange={setPhone} />
+        <Field label="Email" hint="We will send a link to verify it.">
+          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label="Password" hint="At least 8 characters. Write it down: it cannot be reset by text or email.">
+        <Field label="Phone number (optional)" hint="Kept private. Only you and the site admin can see it.">
+          <Input type="tel" inputMode="tel" autoComplete="tel" placeholder="(423) 555-0134" value={phone} onChange={(e) => setPhone(formatAsTyped(e.target.value))} />
+        </Field>
+        <Field label="Password" hint="At least 8 characters.">
           <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" />
         </Field>
         <label className="flex cursor-pointer items-start gap-2.5 pt-1 text-[13px] text-ink">
@@ -188,18 +199,41 @@ export function SignUpPage() {
 }
 
 export function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: siteUrl() });
+    setBusy(false);
+    if (error) return setError(errorMessage(error));
+    setSent(true);
+  }
+
+  if (sent) {
+    return (
+      <AuthCard title="Check your email" notes={false}>
+        <CheckInbox email={email} what="choose a new password" />
+      </AuthCard>
+    );
+  }
+
   return (
-    <AuthCard title="Forgot your password?" notes={false}>
-      <div className="flex gap-3.5">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-on-accent-soft">
-          <KeyRound size={21} />
+    <AuthCard title="Reset your password" subtitle="Enter your email and we will send you a link to reset it." notes={false}>
+      <form onSubmit={submit} className="space-y-4">
+        {error && <ErrorBox text={error} />}
+        <Field label="Email">
+          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </Field>
+        <div className="flex items-center justify-between pt-3">
+          <Link to="/login" className="text-sm font-medium text-accent hover:underline">Back to sign in</Link>
+          <Button type="submit" loading={busy}>Send link</Button>
         </div>
-        <div className="text-sm text-ink">
-          <p>{APP_NAME} does not send texts or emails, so passwords cannot be reset automatically.</p>
-          <p className="mt-2 text-muted">Contact the {APP_NAME} admin with your name and phone number. They can set a temporary password for you, which you can change in Settings after you sign in.</p>
-        </div>
-      </div>
-      <Link to="/login" className="mt-6 inline-block text-sm font-medium text-accent hover:underline">Back to sign in</Link>
+      </form>
     </AuthCard>
   );
 }

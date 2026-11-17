@@ -38,6 +38,7 @@ export interface UserSettings {
   notify_desktop: boolean;
   notify_sound: boolean;
   enter_to_send: boolean;
+  phone: string | null;
 }
 
 export interface ProfilePhoto {

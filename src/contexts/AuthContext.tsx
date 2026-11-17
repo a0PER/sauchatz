@@ -3,7 +3,6 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { cacheProfile } from '../lib/profileCache';
 import type { Profile, ProfileDetails, Theme, UserSettings } from '../lib/types';
-import { loginToPhone } from '../lib/phone';
 
 interface AuthState {
   session: Session | null;
@@ -62,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     const [{ data: p }, { data: s }, { data: d }, { data: admin }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('user_settings').select('user_id, theme, notify_desktop, notify_sound, enter_to_send').eq('user_id', userId).single(),
+      supabase.from('user_settings').select('user_id, theme, notify_desktop, notify_sound, enter_to_send, phone').eq('user_id', userId).single(),
       supabase.from('profile_details').select('*').eq('user_id', userId).maybeSingle(),
       supabase.rpc('am_i_admin'),
     ]);
@@ -146,5 +145,5 @@ export function useMe() {
   const { session, profile } = useAuth();
   if (!session || !profile) throw new Error('useMe used while signed out');
   const login = session.user.email ?? '';
-  return { userId: session.user.id, email: login, phone: loginToPhone(login), profile };
+  return { userId: session.user.id, email: login, profile };
 }

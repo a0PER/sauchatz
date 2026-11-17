@@ -15,7 +15,7 @@ const stubs = `
 create role anon nologin;
 create role authenticated nologin;
 create schema auth;
-create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}', encrypted_password text, created_at timestamptz default now(), updated_at timestamptz, last_sign_in_at timestamptz);
+create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}', encrypted_password text, email_confirmed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz, last_sign_in_at timestamptz);
 create schema extensions;
 create function auth.jwt() returns jsonb language sql stable as
   $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
@@ -66,7 +66,7 @@ const B = '00000000-0000-0000-0000-00000000000b';
 const C = '00000000-0000-0000-0000-00000000000c';
 await db.exec(`
   insert into auth.users (id, email, raw_user_meta_data) values
-  ('${A}', 'alice@example.com', '{"display_name":"Alice Moreno"}'),
+  ('${A}', 'alice@example.com', '{"display_name":"Alice Moreno","phone":"(423) 555-0134"}'),
   ('${B}', 'bob@example.com', '{}'),
   ('${C}', 'cara@example.com', '{"display_name":"Cara"}');
 `);
@@ -145,6 +145,14 @@ const cImg = await as(C, `select count(*)::int n from storage.objects where buck
 if (cImg.rows[0].n === 0) ok('non-member cannot see chat images'); else bad('chat image leak');
 
 
+console.log('\nOptional private phone');
+const myPhone = await as(A, `select phone from user_settings`);
+if (myPhone.rows[0]?.phone === '14235550134' || myPhone.rows[0]?.phone === '4235550134') ok('phone saved from sign-up'); else bad('phone', JSON.stringify(myPhone.rows));
+const otherPhone = await as(B, `select count(*)::int n from user_settings where phone is not null`);
+if (otherPhone.rows[0].n === 0) ok('nobody else can read the phone number'); else bad('phone leak');
+await expectOk('change own phone', A, `update user_settings set phone = '14235550199' where user_id = '${A}'`);
+await expectFail('invalid phone rejected', A, `update user_settings set phone = 'abc' where user_id = '${A}'`);
+
 console.log('\nPrivate profiles');
 await expectOk('Cara writes profile details', C, `update profile_details set major = 'Nursing', interests = array['Hiking'] where user_id = '${C}'`);
 await expectOk('Cara adds a photo', C, `insert into profile_photos (user_id, storage_path, url) values ('${C}', 'x', 'y')`);
@@ -193,7 +201,7 @@ await expectFail('non-admin cannot list users', A, `select * from admin_list_use
 await expectFail('non-admin cannot delete users', A, `select admin_delete_user('${C}')`);
 await db.exec(`insert into admins (user_id) values ('${A}')`);
 const users = await expectOk('admin lists users', A, `select * from admin_list_users()`);
-if (users && users.rows.length >= 3 && users.rows.some((u) => u.login === 'cara@example.com') && !('encrypted_password' in users.rows[0])) ok('admin sees logins but never passwords'); else bad('admin list', JSON.stringify(users?.rows[0]));
+if (users && users.rows.length >= 3 && users.rows.some((u) => u.login === 'cara@example.com') && users.rows.some((u) => u.phone) && !('encrypted_password' in users.rows[0])) ok('admin sees logins but never passwords'); else bad('admin list', JSON.stringify(users?.rows[0]));
 await expectOk('admin sets a new password', A, `select admin_set_password('${C}', 'newpassword1')`);
 const pw = await db.query(`select encrypted_password like '$2%' ok from auth.users where id = '${C}'`);
 if (pw.rows[0].ok) ok('new password stored hashed'); else bad('password not hashed');

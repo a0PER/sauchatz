@@ -62,7 +62,7 @@ export default function AppShell() {
 const STATUSES: Status[] = ['active', 'away', 'dnd'];
 
 function TopBar() {
-  const { profile, phone, userId } = useMe();
+  const { profile, email, userId } = useMe();
   const { updateProfile, signOut, isAdmin } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -117,7 +117,7 @@ function TopBar() {
               <Avatar src={profile.avatar_url} name={profile.display_name} seed={userId} size={40} />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-ink">{profile.display_name}</div>
-                <div className="truncate text-xs text-muted">{phone}</div>
+                <div className="truncate text-xs text-muted">{email}</div>
               </div>
             </div>
           }
