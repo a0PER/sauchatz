@@ -26,7 +26,7 @@ export function isAdult(birthDate: string) {
 /** First sign-in: name, birthday (18+), picture and a short bio. */
 export function ChooseNameDialog() {
   const { profile, email, userId } = useMe();
-  const { details, updateProfile, updateDetails } = useAuth();
+  const { details, updateProfile, updateDetails, isAdmin } = useAuth();
   const [name, setName] = useState('');
   const [birth, setBirth] = useState('');
   const [bio, setBio] = useState(profile.description);
@@ -38,7 +38,8 @@ export function ChooseNameDialog() {
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const nameOk = !needsRealName(profile.display_name, email);
-  const show = !nameOk || (details !== null && !details.birth_date);
+  // Staff accounts are not student profiles, so they skip this step.
+  const show = !isAdmin && (!nameOk || (details !== null && !details.birth_date));
   useEffect(() => { if (show && nameOk) setName(profile.display_name); }, [show, nameOk, profile.display_name]);
   if (!show) return null;
 

@@ -4,6 +4,8 @@ import { Eye, EyeOff, Lock, MailCheck, ShieldCheck } from 'lucide-react';
 import { APP_NAME } from '../config';
 import { errorMessage, siteUrl, supabase } from '../lib/supabase';
 import { formatAsTyped, normalizePhone } from '../lib/phone';
+
+export const STAFF_LOGIN_DOMAIN = 'staff.sauchatz.app';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Field, Input, Logo } from '../components/ui';
 
@@ -99,10 +101,12 @@ export function SignInPage() {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    // Staff accounts can sign in with just a username, e.g. "admin".
+    const login = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@${STAFF_LOGIN_DOMAIN}`;
+    const { error } = await supabase.auth.signInWithPassword({ email: login, password });
     setBusy(false);
     if (error) {
-      setError(/invalid login/i.test(error.message) ? 'That email and password do not match.' : /not confirmed/i.test(error.message) ? 'Please verify your email first. Check your inbox for the link.' : errorMessage(error));
+      setError(/invalid login/i.test(error.message) ? 'That email (or username) and password do not match.' : /not confirmed/i.test(error.message) ? 'Please verify your email first. Check your inbox for the link.' : errorMessage(error));
     }
   }
 
@@ -115,7 +119,7 @@ export function SignInPage() {
       <form onSubmit={submit} className="space-y-4">
         {error && <ErrorBox text={error} />}
         <Field label="Email">
-          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+          <Input type="text" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
         </Field>
         <Field label="Password">
           <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
