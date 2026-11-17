@@ -123,6 +123,8 @@ export interface Message {
   recipient_id?: string | null;
   /** Tiny blurred preview of a private photo, shown to everyone else in the group. */
   image_blur?: string | null;
+  /** 'joined' for the automatic "Name joined the chat" line. */
+  kind?: 'text' | 'joined';
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;

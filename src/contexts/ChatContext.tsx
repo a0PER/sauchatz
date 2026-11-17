@@ -91,7 +91,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     refresh();
 
     const notify = async (m: Message) => {
-      if (m.sender_id === userId) return;
+      if (m.sender_id === userId || (m.kind && m.kind !== 'text')) return;
       const conv = convRef.current.find((c) => c.id === m.conversation_id);
       const { profile: me, settings: prefs } = prefsRef.current;
       if (conv?.muted || me?.status === 'dnd') return;

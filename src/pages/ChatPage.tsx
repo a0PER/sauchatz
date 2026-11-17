@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { ArrowLeft, Info, Lock, LockKeyhole, MessageSquareOff, Users } from 'lucide-react';
+import { ArrowLeft, Info, Lock, LockKeyhole, MessageSquareOff, UserPlus, Users } from 'lucide-react';
 import { EnterPinDialog, ForgotPinDialog } from '../components/ChatPin';
 import { MESSAGE_PAGE_SIZE } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
@@ -10,9 +10,9 @@ import { usePresence } from '../contexts/PresenceContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatDayDivider, plural, sameDay, statusLabel } from '../lib/format';
 import { makeBlurPreview, uploadChatImage } from '../lib/images';
-import { cacheProfile } from '../lib/profileCache';
+import { cacheProfile, getProfile } from '../lib/profileCache';
 import { errorMessage, supabase } from '../lib/supabase';
-import type { Conversation, Member, Message, Reaction } from '../lib/types';
+import type { Conversation, Member, Message, Profile, Reaction } from '../lib/types';
 import { Avatar, Button, EmptyState, IconButton, Spinner } from '../components/ui';
 import { MessageItem, type ReactionSummary } from '../components/chat/MessageItem';
 import { chatBackgroundCss, useLayout } from '../lib/layout';
@@ -460,11 +460,11 @@ function ChatRoom() {
               {messages.map((m, i) => {
                 const prev = messages[i - 1];
                 const newDay = !prev || !sameDay(prev.created_at, m.created_at);
-                const compact = !newDay && !!prev && prev.sender_id === m.sender_id && !prev.deleted_at
+                const compact = !newDay && !!prev && prev.sender_id === m.sender_id && !prev.deleted_at && (prev.kind ?? 'text') === 'text'
                   && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60 * 1000;
                 const sender = m.sender_id ? memberMap.get(m.sender_id)?.profile ?? (m.sender_id === userId ? me : undefined) : undefined;
                 const next = messages[i + 1];
-                const nextSame = !!next && next.sender_id === m.sender_id && !next.deleted_at && sameDay(next.created_at, m.created_at)
+                const nextSame = !!next && next.sender_id === m.sender_id && !next.deleted_at && (next.kind ?? 'text') === 'text' && sameDay(next.created_at, m.created_at)
                   && new Date(next.created_at).getTime() - new Date(m.created_at).getTime() < 5 * 60 * 1000;
                 return (
                   <div key={m.id}>
@@ -475,6 +475,9 @@ function ChatRoom() {
                         <div className="h-px flex-1 bg-line" />
                       </div>
                     )}
+                    {m.kind === 'joined' ? (
+                      <JoinLine userId={m.sender_id} known={sender} />
+                    ) : (
                     <MessageItem
                       message={m}
                       sender={sender ?? undefined}
@@ -505,6 +508,7 @@ function ChatRoom() {
                         ) : null
                       }
                     />
+                    )}
                   </div>
                 );
               })}
@@ -658,6 +662,24 @@ export default function ChatPage() {
         }}
       />
       <ForgotPinDialog open={forgot} onClose={() => setForgot(false)} onDone={refresh} />
+    </div>
+  );
+}
+
+/** "Name joined the chat", shown in the middle of a group conversation. */
+function JoinLine({ userId: who, known }: { userId: string | null; known?: Profile }) {
+  const [name, setName] = useState(known?.display_name ?? null);
+  useEffect(() => {
+    if (known) setName(known.display_name);
+    else if (who) getProfile(who).then((p) => setName(p?.display_name ?? null));
+  }, [who, known]);
+  return (
+    <div className="flex justify-center px-5 py-2">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-xs text-muted">
+        <UserPlus size={13} />
+        {who ? <Link to={`/u/${who}`} className="font-medium text-ink hover:underline">{name ?? 'Someone'}</Link> : <span className="font-medium text-ink">Someone</span>}
+        joined the chat
+      </span>
     </div>
   );
 }

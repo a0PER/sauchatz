@@ -352,6 +352,22 @@ const ag2 = (await as(A, `select create_group('Admin group', '', array['${P2}']:
 const isIn2 = (await db.query(`select count(*)::int n from conversation_members where conversation_id = '${ag2}' and user_id = '${P2}'`)).rows[0].n;
 if (isIn2 === 1) ok('site admin can create a group with private people'); else bad('admin create');
 
+console.log('\nJoin messages');
+const jg = (await as(A, `select create_group('Join test', '', array['${B}']::uuid[]) id`)).rows[0].id;
+const j0 = (await db.query(`select count(*)::int n from messages where conversation_id = '${jg}' and kind = 'joined'`)).rows[0].n;
+if (j0 === 0) ok('no join lines for the people a group starts with'); else bad('join lines at creation', j0);
+await as(A, `select add_group_members('${jg}', array['${P2}']::uuid[])`);
+const j1 = (await as(B, `select sender_id, kind from messages where conversation_id = '${jg}' and kind = 'joined'`)).rows;
+if (j1.length === 1 && j1[0].sender_id === P2) ok('adding someone posts a join line everyone sees'); else bad('join line', JSON.stringify(j1));
+await expectFail('members cannot fake a join line', B, `insert into messages (conversation_id, sender_id, body, kind) values ('${jg}', '${B}', '', 'joined')`);
+await expectFail('join lines cannot be edited', P2, `update messages set body = 'x' where conversation_id = '${jg}' and kind = 'joined'`);
+const jl = (await as(B, `select last_body, last_sender_id, unread_count from get_my_conversations() where id = '${jg}'`)).rows[0];
+if (jl.last_body === 'Private Pat joined the chat' && jl.last_sender_id === null && Number(jl.unread_count) === 0) ok('sidebar shows the join line and does not count it as unread'); else bad('sidebar join', JSON.stringify(jl));
+const dmBefore = (await db.query(`select count(*)::int n from messages where kind = 'joined'`)).rows[0].n;
+await as(B, `select get_or_create_direct('${P2}')`);
+const dmAfter = (await db.query(`select count(*)::int n from messages where kind = 'joined'`)).rows[0].n;
+if (dmBefore === dmAfter) ok('direct messages get no join lines'); else bad('dm join line');
+
 console.log('\nEmail verification');
 const X = D;
 const ev0 = (await as(X, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;
