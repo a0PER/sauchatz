@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Camera, Eye, EyeOff, Plus, ShieldCheck, ShieldAlert, Trash2, X } from 'lucide-react';
 import { MAX_DESCRIPTION_LENGTH } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -9,8 +9,9 @@ import {
   CLASS_YEARS, HERE_FOR, INTEREST_SUGGESTIONS, MAX_GALLERY, MAX_INTERESTS, MAX_PROMPTS, PROMPT_QUESTIONS, ageFrom,
 } from '../lib/profileOptions';
 import { errorMessage, supabase } from '../lib/supabase';
-import type { ProfilePhoto, ProfilePrompt } from '../lib/types';
-import { Avatar, Button, Field, IconButton, Input, Spinner, Textarea, Toggle, cx } from '../components/ui';
+import type { Profile, ProfileDetails, ProfilePhoto, ProfilePrompt, Status } from '../lib/types';
+import { cacheProfile } from '../lib/profileCache';
+import { Avatar, Button, EmptyState, Field, IconButton, Input, Spinner, Textarea, Toggle, cx } from '../components/ui';
 import { isAdult } from '../components/ChooseNameDialog';
 
 function Section({ title, description, children, action }: { title: string; description?: string; children: ReactNode; action?: ReactNode }) {
@@ -60,11 +61,86 @@ function ToggleChip({ on, onClick, children }: { on: boolean; onClick: () => voi
   );
 }
 
+/** Your own profile. */
 export default function EditProfilePage() {
   const { profile, userId } = useMe();
   const { details, updateProfile, updateDetails } = useAuth();
+  return (
+    <ProfileEditor
+      userId={userId}
+      profile={profile}
+      details={details}
+      saveProfile={updateProfile}
+      saveDetails={updateDetails}
+    />
+  );
+}
+
+/** An admin editing someone else's profile. */
+export function AdminEditProfilePage() {
+  const { id = '' } = useParams();
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const [data, setData] = useState<{ profile: Profile; details: ProfileDetails | null; photos: ProfilePhoto[] } | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    supabase.rpc('admin_get_profile', { p_user: id }).then(({ data: d, error: e }) => {
+      if (e) setError(errorMessage(e));
+      else setData(d as { profile: Profile; details: ProfileDetails | null; photos: ProfilePhoto[] });
+    });
+  }, [id, isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState icon={<ShieldAlert size={26} />} title="Admins only" body="You do not have access to this page." action={<Button variant="secondary" onClick={() => navigate('/')}>Go back</Button>} />
+      </div>
+    );
+  }
+  if (error) return <div className="flex flex-1 items-center justify-center p-6 text-sm text-danger">{error}</div>;
+  if (!data) return <div className="flex flex-1 items-center justify-center"><Spinner size={24} /></div>;
+
+  const adminSave = async (profilePatch: Partial<Profile>, detailsPatch: Partial<ProfileDetails>) => {
+    const { error: e } = await supabase.rpc('admin_update_profile', { p_user: id, p_profile: profilePatch, p_details: detailsPatch });
+    if (e) throw e;
+    cacheProfile({ ...data.profile, ...profilePatch } as Profile);
+  };
+
+  return (
+    <ProfileEditor
+      key={id}
+      admin
+      userId={id}
+      profile={data.profile}
+      details={data.details}
+      initialPhotos={data.photos}
+      saveProfile={(patch) => adminSave(patch, {})}
+      saveDetails={(patch) => adminSave({}, patch)}
+    />
+  );
+}
+
+interface EditorProps {
+  userId: string;
+  profile: Profile;
+  details: ProfileDetails | null;
+  initialPhotos?: ProfilePhoto[];
+  admin?: boolean;
+  saveProfile: (patch: Partial<Profile>) => Promise<void>;
+  saveDetails: (patch: Partial<ProfileDetails>) => Promise<void>;
+}
+
+function ProfileEditor({ userId, profile, details, initialPhotos, admin = false, saveProfile, saveDetails }: EditorProps) {
+  const updateProfile = saveProfile;
+  const updateDetails = saveDetails;
   const toast = useToast();
   const navigate = useNavigate();
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url);
+  const [status, setStatus] = useState<Status>(profile.status);
+  const [nameLocked, setNameLocked] = useState(Boolean(profile.name_locked));
+  const nameDisabled = !admin && Boolean(profile.name_locked);
 
   const [name, setName] = useState(profile.display_name);
   const [bio, setBio] = useState(profile.description);
@@ -80,15 +156,16 @@ export default function EditProfilePage() {
   const [hidden, setHidden] = useState<string[]>(details?.hidden_fields ?? []);
   const isHidden = (k: string) => hidden.includes(k);
   const setItem = (k: string) => (h: boolean) => setHidden((list) => (h ? [...list.filter((x) => x !== k), k] : list.filter((x) => x !== k)));
-  const [photos, setPhotos] = useState<ProfilePhoto[] | null>(null);
+  const [photos, setPhotos] = useState<ProfilePhoto[] | null>(initialPhotos ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const avatarPicker = useRef<HTMLInputElement>(null);
   const galleryPicker = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (initialPhotos) return;
     supabase.from('profile_photos').select('*').eq('user_id', userId).order('created_at').then(({ data }) => setPhotos((data as ProfilePhoto[]) ?? []));
-  }, [userId]);
+  }, [userId, initialPhotos]);
 
   async function changeAvatar(f: File | undefined) {
     if (!f) return;
@@ -97,13 +174,25 @@ export default function EditProfilePage() {
     setUploading(true);
     try {
       const { url } = await uploadMedia(`users/${userId}/avatar`, f, 1200);
-      const old = mediaPathFromUrl(profile.avatar_url);
+      const old = mediaPathFromUrl(avatarUrl);
       await updateProfile({ avatar_url: url });
+      setAvatarUrl(url);
       if (old) removeMedia(old);
     } catch (e) {
       toast(errorMessage(e), 'error');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function removeAvatar() {
+    const old = mediaPathFromUrl(avatarUrl);
+    try {
+      await updateProfile({ avatar_url: null });
+      setAvatarUrl(null);
+      if (old) removeMedia(old);
+    } catch (e) {
+      toast(errorMessage(e), 'error');
     }
   }
 
@@ -146,11 +235,16 @@ export default function EditProfilePage() {
   }
 
   async function save() {
-    if (!name.trim()) return toast('Please enter your name.', 'error');
-    if (birth && !isAdult(birth)) return toast('You must be 18 or older.', 'error');
+    if (!name.trim()) return toast('Please enter a name.', 'error');
+    if (birth && !isAdult(birth)) return toast('Members must be 18 or older.', 'error');
     setSaving(true);
     try {
-      await updateProfile({ display_name: name.trim(), description: bio.trim(), is_public: isPublic });
+      await updateProfile({
+        ...(nameDisabled ? {} : { display_name: name.trim() }),
+        description: bio.trim(),
+        is_public: isPublic,
+        ...(admin ? { status, name_locked: nameLocked } : {}),
+      });
       await updateDetails({
         birth_date: birth || null,
         class_year: classYear || null,
@@ -161,7 +255,7 @@ export default function EditProfilePage() {
         prompts: prompts.filter((p) => p.answer.trim()).map((p) => ({ question: p.question, answer: p.answer.trim().slice(0, 300) })),
         hidden_fields: hidden,
       });
-      toast('Profile saved', 'success');
+      toast(admin ? `Saved changes to ${name.trim()}` : 'Profile saved', 'success');
       navigate(`/u/${userId}`);
     } catch (e) {
       toast(errorMessage(e), 'error');
@@ -180,7 +274,7 @@ export default function EditProfilePage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-2 sm:px-6">
         <IconButton label="Back" onClick={() => navigate(-1)}><ArrowLeft size={20} /></IconButton>
-        <h1 className="text-[15px] font-semibold text-ink">Edit profile</h1>
+        <h1 className="truncate text-[15px] font-semibold text-ink">{admin ? `Edit ${profile.display_name} (admin)` : 'Edit profile'}</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/u/${userId}`)}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={save}>Save</Button>
@@ -189,6 +283,36 @@ export default function EditProfilePage() {
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto bg-bg/50">
         <div className="mx-auto max-w-xl space-y-4 px-4 pb-24 pt-6 sm:px-6">
+          {admin && (
+            <Section title="Admin controls" description="Changes here are saved to this person's profile when you press Save.">
+              <div className="space-y-4">
+                <p className="flex items-start gap-2 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[13px] text-on-accent-soft">
+                  <ShieldCheck size={16} className="mt-0.5 shrink-0" /> You are editing someone else's profile as an admin.
+                </p>
+                <Field label="Status">
+                  <select value={status} onChange={(e) => setStatus(e.target.value as Status)} className={selectClass}>
+                    <option value="active">Active</option>
+                    <option value="away">Away</option>
+                    <option value="dnd">Do not disturb</option>
+                  </select>
+                </Field>
+                <div className="flex items-start justify-between gap-6">
+                  <div>
+                    <div className="text-sm text-ink">Lock their name</div>
+                    <p className="mt-0.5 text-[13px] text-muted">They cannot change their name while this is on.</p>
+                  </div>
+                  <Toggle checked={nameLocked} onChange={setNameLocked} label="Lock their name" />
+                </div>
+                <div className="flex items-start justify-between gap-6">
+                  <div>
+                    <div className="text-sm text-ink">Public profile</div>
+                    <p className="mt-0.5 text-[13px] text-muted">{isPublic ? 'Anyone can find them in Explore.' : 'Private: hidden from Explore and search.'}</p>
+                  </div>
+                  <Toggle checked={isPublic} onChange={setIsPublic} label="Public profile" />
+                </div>
+              </div>
+            </Section>
+          )}
           <Section title="Photos" description="Your main picture is always shown. Add up to 9 more; they appear between your prompts." action={<Visibility hidden={isHidden('photos')} onChange={setItem('photos')} label="Extra photos" />}>
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -196,8 +320,8 @@ export default function EditProfilePage() {
                 className="group relative col-span-1 row-span-1 aspect-[4/5] overflow-hidden rounded-2xl bg-surface-2 ring-2 ring-accent ring-offset-2 ring-offset-surface"
                 aria-label="Change main picture"
               >
-                {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt="" className="size-full object-cover" />
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="size-full object-cover" />
                 ) : (
                   <span className="flex size-full items-center justify-center"><Avatar name={profile.display_name} seed={userId} size={56} /></span>
                 )}
@@ -230,14 +354,19 @@ export default function EditProfilePage() {
                 </button>
               )}
             </div>
+            {avatarUrl && (
+              <button onClick={removeAvatar} className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-danger">
+                <Trash2 size={14} /> Remove main picture
+              </button>
+            )}
             <input ref={avatarPicker} type="file" accept={ACCEPT_ATTR} hidden onChange={(e) => { changeAvatar(e.target.files?.[0]); e.target.value = ''; }} />
             <input ref={galleryPicker} type="file" accept={ACCEPT_ATTR} multiple hidden onChange={(e) => { addPhotos(e.target.files); e.target.value = ''; }} />
           </Section>
 
           <Section title="The basics" description="Choose who sees each item. Your exact birthday is never shown, only your age.">
             <div className="space-y-4">
-              <Field label="Name" hint={profile.name_locked ? 'Your name was set by an admin and cannot be changed.' : undefined}>
-                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} disabled={profile.name_locked} />
+              <Field label="Name" hint={nameDisabled ? 'Your name was set by an admin and cannot be changed.' : undefined}>
+                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} disabled={nameDisabled} />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -351,6 +480,7 @@ export default function EditProfilePage() {
             </div>
           </Section>
 
+{!admin && (
           <Section title="Who can see your profile">
             <div className="flex items-start justify-between gap-6">
               <div>
@@ -364,6 +494,7 @@ export default function EditProfilePage() {
               <Toggle checked={isPublic} onChange={setIsPublic} label="Public profile" />
             </div>
           </Section>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => navigate(`/u/${userId}`)}>Cancel</Button>

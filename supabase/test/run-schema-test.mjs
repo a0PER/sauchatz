@@ -313,6 +313,24 @@ await expectOk('admin unlocks', A, `select admin_set_display_name('${D}', 'Safe 
 await expectOk('after unlock they can rename', D, `update profiles set display_name = 'Dana' where id = '${D}'`);
 await expectFail('empty names are refused', A, `select admin_set_display_name('${D}', '   ')`);
 
+console.log('\nAdmin profile editing');
+await expectFail('non-admin cannot read the admin profile view', B, `select admin_get_profile('${D}')`);
+const ag = await expectOk('admin loads a full profile', A, `select admin_get_profile('${D}') j`);
+if (ag && ag.rows[0].j.profile.id === D && Array.isArray(ag.rows[0].j.photos)) ok('profile, details and photos returned'); else bad('admin get');
+await expectOk('admin makes the profile private and changes status, bio and details', A,
+  `select admin_update_profile('${D}', '{"is_public": false, "status": "away", "description": "edited by admin", "name_locked": true}'::jsonb,
+   '{"major": "Nursing", "interests": ["Hiking"], "hidden_fields": ["age"], "prompts": []}'::jsonb)`);
+const adm = (await db.query(`select p.is_public, p.status, p.description, p.name_locked, d.major, d.interests, d.hidden_fields from profiles p join profile_details d on d.user_id = p.id where p.id = '${D}'`)).rows[0];
+if (!adm.is_public && adm.status === "away" && adm.description === "edited by admin" && adm.name_locked && adm.major === "Nursing" && adm.interests[0] === "Hiking" && adm.hidden_fields[0] === "age") ok("all changes saved"); else bad("admin update", JSON.stringify(adm));
+await expectFail('bad status is refused', A, `select admin_update_profile('${D}', '{"status": "hacked"}'::jsonb)`);
+await expectFail('under 18 birthday is refused', A, `select admin_update_profile('${D}', '{}'::jsonb, '{"birth_date": "2015-01-01"}'::jsonb)`);
+await expectFail('non-admin cannot use the admin editor', B, `select admin_update_profile('${D}', '{"is_public": true}'::jsonb)`);
+await expectOk('admin adds a photo to someone', A, `insert into profile_photos (user_id, storage_path, url) values ('${D}', 'users/${D}/photos/a.jpg', 'https://x/a.jpg')`);
+await expectOk('admin uploads into their folder', A, `insert into storage.objects (bucket_id, name) values ('media', 'users/${D}/photos/a.jpg')`);
+await expectFail('regular members cannot upload into another folder', B, `insert into storage.objects (bucket_id, name) values ('media', 'users/${D}/photos/b.jpg')`);
+await expectOk('admin removes the photo', A, `delete from profile_photos where user_id = '${D}'`);
+await db.exec(`update profiles set is_public = true, name_locked = false where id = '${D}'`);
+
 console.log('\nEmail verification');
 const X = D;
 const ev0 = (await as(X, `select email_verified from profiles where id = '${X}'`)).rows[0].email_verified;

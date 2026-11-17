@@ -12,7 +12,7 @@ import ChatPage from './pages/ChatPage';
 import PeoplePage from './pages/PeoplePage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
-import EditProfilePage from './pages/EditProfilePage';
+import EditProfilePage, { AdminEditProfilePage } from './pages/EditProfilePage';
 import AdminPage from './pages/AdminPage';
 import PrivacyPage from './pages/PrivacyPage';
 import JoinPage, { JoinSignedOut, takePendingInvite } from './pages/JoinPage';
@@ -88,6 +88,7 @@ function Gate() {
             <Route path="u/:id" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile/edit" element={<EditProfilePage />} />
+            <Route path="admin/edit/:id" element={<AdminEditProfilePage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="join/:code" element={<JoinPage />} />
           </Route>

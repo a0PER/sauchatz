@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Ban, BadgeCheck, BookOpen, MailWarning, Flag, GraduationCap, Heart, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
 } from 'lucide-react';
-import { useMe } from '../contexts/AuthContext';
+import { useAuth, useMe } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatFullDate, statusLabel } from '../lib/format';
@@ -52,6 +52,7 @@ function Card({ children, className }: { children: ReactNode; className?: string
 export default function ProfilePage() {
   const { id = '' } = useParams();
   const { userId } = useMe();
+  const { isAdmin } = useAuth();
   const { presenceOf } = usePresence();
   const toast = useToast();
   const navigate = useNavigate();
@@ -200,6 +201,7 @@ export default function ProfilePage() {
               ? { label: 'Unblock', icon: <Ban size={16} />, onSelect: unblock }
               : { label: 'Block', icon: <Ban size={16} />, danger: true, onSelect: () => setConfirmBlock(true) },
             { label: 'Report', icon: <Flag size={16} />, danger: true, onSelect: () => setReporting(true) },
+            ...(isAdmin ? [{ label: 'Edit profile (admin)', icon: <Pencil size={16} />, onSelect: () => navigate(`/admin/edit/${id}`) }] : []),
           ]}
         />
       )}
