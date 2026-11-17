@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, SendHorizontal, X } from 'lucide-react';
+import { ImagePlus, SendHorizontal, Smile, X } from 'lucide-react';
+import { EmojiPicker } from './EmojiPicker';
 import { MAX_MESSAGE_LENGTH } from '../../config';
 import { useToast } from '../../contexts/ToastContext';
 import { ACCEPT_ATTR, validateImage } from '../../lib/images';
@@ -19,6 +20,7 @@ export function Composer({
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -63,6 +65,22 @@ export function Composer({
     area.current?.focus();
   }
 
+  // Insert an emoji where the cursor is.
+  function insertEmoji(emoji: string) {
+    const el = area.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    onTyping();
+    requestAnimationFrame(() => {
+      if (!el) return;
+      const pos = start + emoji.length;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
   const canSend = Boolean(text.trim() || file);
 
   return (
@@ -82,10 +100,14 @@ export function Composer({
             </div>
           </div>
         )}
-        <div className="flex items-end gap-1 px-1.5 py-1.5">
+        <div className="relative flex items-end gap-0.5 px-1.5 py-1.5">
           <IconButton label="Add a photo" size={38} onClick={() => picker.current?.click()}>
             <ImagePlus size={20} />
           </IconButton>
+          <IconButton label="Emoji" size={38} active={emojiOpen} onMouseDown={(e) => e.preventDefault()} onClick={() => setEmojiOpen((o) => !o)}>
+            <Smile size={20} />
+          </IconButton>
+          {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
           <input
             ref={picker}
             type="file"

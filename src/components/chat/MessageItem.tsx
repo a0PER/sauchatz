@@ -5,6 +5,7 @@ import { formatTime } from '../../lib/format';
 import { getChatImageUrl } from '../../lib/images';
 import type { Message, Profile } from '../../lib/types';
 import { Avatar, Button, Spinner, TestBadge, Textarea, cx } from '../ui';
+import { isEmojiOnly } from './EmojiPicker';
 
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
 
@@ -79,6 +80,7 @@ function MessageItemInner({
   bubbles = false, dense = false, nextSame = false, showName = false,
 }: Props) {
   const deleted = Boolean(m.deleted_at);
+  const bigEmoji = isEmojiOnly(m.body);
   const name = sender?.display_name ?? 'Deleted user';
   const [draft, setDraft] = useState(m.body);
   const editRef = useRef<HTMLTextAreaElement>(null);
@@ -150,9 +152,14 @@ function MessageItemInner({
               {m.body && (
                 <div
                   className={cx(
-                    'whitespace-pre-wrap break-words rounded-[20px] px-3.5 py-2 text-[14.5px] leading-[1.45]',
-                    mine ? 'bg-accent text-on-accent [&_a]:text-on-accent' : 'bg-surface-2 text-ink',
-                    mine ? (nextSame ? 'rounded-br-md' : '') : nextSame ? 'rounded-bl-md' : '',
+                    'whitespace-pre-wrap break-words',
+                    bigEmoji
+                      ? 'px-1 text-[40px] leading-tight'
+                      : cx(
+                          'rounded-[20px] px-3.5 py-2 text-[14.5px] leading-[1.45]',
+                          mine ? 'bg-accent text-on-accent [&_a]:text-on-accent' : 'bg-surface-2 text-ink',
+                          mine ? (nextSame ? 'rounded-br-md' : '') : nextSame ? 'rounded-bl-md' : '',
+                        ),
                   )}
                 >
                   {linkify(m.body)}
@@ -201,7 +208,7 @@ function MessageItemInner({
         ) : editing ? editor : (
           <>
             {m.body && (
-              <p className="whitespace-pre-wrap break-words text-[14.5px] leading-[1.5] text-ink">
+              <p className={cx('whitespace-pre-wrap break-words text-ink', bigEmoji ? 'py-0.5 text-[40px] leading-tight' : 'text-[14.5px] leading-[1.5]')}>
                 {linkify(m.body)}
                 {m.edited_at && <span className="ml-1.5 text-xs text-subtle">(edited)</span>}
               </p>
