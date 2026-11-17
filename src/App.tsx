@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import EditProfilePage from './pages/EditProfilePage';
 import AdminPage from './pages/AdminPage';
+import PrivacyPage from './pages/PrivacyPage';
 
 function Splash() {
   return (
@@ -51,6 +52,7 @@ function Gate() {
         <Route path="/login" element={<SignInPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/forgot" element={<ForgotPasswordPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -62,6 +64,7 @@ function Gate() {
     <PresenceProvider>
       <ChatProvider>
         <Routes>
+          <Route path="privacy" element={<PrivacyPage />} />
           <Route element={<AppShell />}>
             <Route index element={<HomePage />} />
             <Route path="c/:id" element={<ChatPage />} />

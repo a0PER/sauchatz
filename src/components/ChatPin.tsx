@@ -207,7 +207,7 @@ export function ChatPinCard() {
       <div className="px-5 pb-1 pt-4">
         <h2 className="text-[15px] font-semibold text-ink">Chat PIN</h2>
         <p className="mt-0.5 text-[13px] text-muted">
-          Lock any chat from its details panel. Locked chats hide their previews and need your PIN to open.
+          Lock any chat from its details panel. Locked chats hide their previews and need your PIN to open, so people using your device cannot read them.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2 px-5 pb-5 pt-3">

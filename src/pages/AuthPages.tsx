@@ -41,7 +41,8 @@ function AuthCard({ title, subtitle, children, footer, notes = true }: { title: 
       {footer && <div className="mt-6 text-sm text-muted">{footer}</div>}
       <p className="mt-6 max-w-[420px] text-center text-xs leading-relaxed text-subtle">
         {APP_NAME} is an independent student project made for current Southern Adventist University students.
-        It is not affiliated with, endorsed by, or run by Southern Adventist University.
+        It is not affiliated with, endorsed by, or run by Southern Adventist University.{' '}
+        <Link to="/privacy" className="underline hover:text-muted">Privacy and rules</Link>
       </p>
     </div>
   );
@@ -149,7 +150,7 @@ export function SignUpPage() {
     const digits = phone.trim() ? normalizePhone(phone) : null;
     if (phone.trim() && !digits) return setError('That phone number does not look right. You can also leave it empty.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
-    if (!agree) return setError('Please confirm you are a current SAU student and 18 or older.');
+    if (!agree) return setError('Please confirm the checkbox to continue.');
     setBusy(true);
     setError('');
     const { data, error } = await supabase.auth.signUp({
@@ -192,7 +193,10 @@ export function SignUpPage() {
         </Field>
         <label className="flex cursor-pointer items-start gap-2.5 pt-1 text-[13px] text-ink">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
-          I am a current Southern Adventist University student and I am 18 or older.
+          <span>
+            I am a current Southern Adventist University student, I am 18 or older, and I agree to the{' '}
+            <Link to="/privacy" target="_blank" className="font-medium text-accent hover:underline">Privacy and rules</Link>.
+          </span>
         </label>
         <div className="flex justify-end pt-2">
           <Button type="submit" loading={busy}>Create account</Button>

@@ -364,6 +364,9 @@ function PrivacySection() {
 
   return (
     <>
+      <p className="mb-6 text-[13px] text-muted">
+        <Link to="/privacy" className="font-medium text-accent hover:underline">Privacy and rules</Link>
+      </p>
       <Card title="Profile visibility">
         <Row
           title="Public profile"
