@@ -9,7 +9,7 @@ import { useChats } from '../contexts/ChatContext';
 import { usePresence } from '../contexts/PresenceContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatDayDivider, plural, sameDay, statusLabel } from '../lib/format';
-import { uploadChatImage } from '../lib/images';
+import { makeBlurPreview, uploadChatImage } from '../lib/images';
 import { cacheProfile } from '../lib/profileCache';
 import { errorMessage, supabase } from '../lib/supabase';
 import type { Conversation, Member, Message, Reaction } from '../lib/types';
@@ -62,6 +62,7 @@ function ChatRoom() {
   const lastTypingSent = useRef(0);
 
   const memberMap = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
+  const firstName = (uid: string) => memberMap.get(uid)?.profile?.display_name?.split(' ')[0] ?? 'one person';
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const reactionMap = useMemo(() => {
     const map = new Map<string, ReactionSummary[]>();
@@ -288,6 +289,11 @@ function ChatRoom() {
   /* ---------- Actions ---------- */
 
   async function send(body: string, file: File | null, privateTo: string | null = null, gifUrl: string | null = null) {
+    // Private photos carry no caption, so any text goes out as its own normal message first.
+    if (privateTo && file && body.trim()) {
+      await send(body, null);
+      body = '';
+    }
     const msgId = crypto.randomUUID();
     const temp: Message = {
       id: msgId, conversation_id: id, sender_id: userId, body, image_path: null, gif_url: gifUrl, recipient_id: privateTo,
@@ -298,9 +304,10 @@ function ChatRoom() {
     setMessages((list) => [...list, temp]);
     try {
       const image_path = file ? await uploadChatImage(id, file, privateTo ? { recipient: privateTo, sender: userId } : undefined) : null;
+      const image_blur = file && privateTo ? await makeBlurPreview(file) : null;
       const { data, error } = await supabase
         .from('messages')
-        .insert({ id: msgId, conversation_id: id, sender_id: userId, body, image_path, gif_url: gifUrl, recipient_id: privateTo })
+        .insert({ id: msgId, conversation_id: id, sender_id: userId, body, image_path, image_blur, gif_url: gifUrl, recipient_id: privateTo })
         .select()
         .single();
       if (error) throw error;
@@ -484,7 +491,8 @@ function ChatRoom() {
                       onOpenImage={(src) => setLightbox({ srcs: [src], index: 0 })}
                       reactions={reactionMap.get(m.id)}
                       onReact={m.pending ? undefined : (emoji) => toggleReaction(m.id, emoji)}
-                      privateLabel={m.recipient_id ? (m.sender_id === userId ? `Only ${memberMap.get(m.recipient_id)?.profile?.display_name?.split(' ')[0] ?? 'one person'} can see this` : 'Private photo, sent only to you') : undefined}
+                      privateLabel={m.recipient_id ? (m.sender_id === userId ? `Only ${firstName(m.recipient_id)} can see this` : m.recipient_id === userId ? 'Private photo, sent only to you' : `Private photo for ${firstName(m.recipient_id)}`) : undefined}
+                      lockedPhoto={!!m.recipient_id && m.sender_id !== userId && m.recipient_id !== userId}
                       bubbles={layout.messageStyle === 'bubbles'}
                       dense={layout.density === 'compact'}
                       nextSame={nextSame}

@@ -56,7 +56,12 @@ function ActionRow({ icon, label, onClick, danger }: { icon: ReactNode; label: s
 }
 
 function SharedPhotos({ messages, onOpen }: { messages: Message[]; onOpen: (srcs: string[], i: number) => void }) {
-  const paths = messages.filter((m) => m.image_path && !m.deleted_at).map((m) => m.image_path!).reverse();
+  const { userId } = useMe();
+  // Skip private photos meant for someone else (the file is locked for this person).
+  const paths = messages
+    .filter((m) => m.image_path && !m.deleted_at && (!m.recipient_id || m.recipient_id === userId || m.sender_id === userId))
+    .map((m) => m.image_path!)
+    .reverse();
   const key = paths.join('|');
   const [urls, setUrls] = useState<string[]>([]);
   useEffect(() => {

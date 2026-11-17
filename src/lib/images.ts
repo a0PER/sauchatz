@@ -63,6 +63,25 @@ export function mediaPathFromUrl(url: string | null | undefined) {
   return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length));
 }
 
+/** Makes a tiny, blurred JPEG (as a data URL) for private photo previews. */
+export async function makeBlurPreview(file: File): Promise<string | null> {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return null;
+  const scale = 20 / Math.max(bitmap.width, bitmap.height);
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.filter = 'blur(1.5px)';
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const url = canvas.toDataURL('image/jpeg', 0.5);
+  return url.length <= 6000 ? url : null;
+}
+
 /** Uploads a picture sent in a chat to the private "chat-images" bucket. */
 export async function uploadChatImage(conversationId: string, file: File, privateTo?: { recipient: string; sender: string }) {
   const blob = await compressImage(file, 2000);

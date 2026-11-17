@@ -24,6 +24,20 @@ function linkify(text: string): ReactNode[] {
   );
 }
 
+export function LockedImage({ blur, label }: { blur?: string | null; label?: string }) {
+  return (
+    <div className="relative mt-1 h-[180px] w-[240px] max-w-[68vw] overflow-hidden rounded-xl border border-line bg-surface-2" role="img" aria-label="Private photo">
+      {blur && (
+        <img src={blur} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-125 object-cover blur-xl" />
+      )}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/25 px-3 text-center text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35"><Lock size={16} /></span>
+        <span className="text-xs font-medium drop-shadow">{label ?? 'Private photo'}</span>
+      </div>
+    </div>
+  );
+}
+
 export function ChatImage({ path, local, onOpen }: { path: string | null; local?: string; onOpen: (src: string) => void }) {
   const [src, setSrc] = useState<string | null>(local ?? null);
   const [loaded, setLoaded] = useState(false);
@@ -79,12 +93,14 @@ interface Props {
   onReact?: (emoji: string) => void;
   /** Shown under private photos, e.g. 'Only Maya can see this'. */
   privateLabel?: string;
+  /** Private photo meant for someone else: show only the blurred preview. */
+  lockedPhoto?: boolean;
 }
 
 function MessageItemInner({
   message: m, sender, mine, compact, editing, enterToSend,
   onStartEdit, onCancelEdit, onSaveEdit, onDelete, onReport, onCopy, onOpenImage, footer,
-  bubbles = false, dense = false, nextSame = false, showName = false, reactions = [], onReact, privateLabel,
+  bubbles = false, dense = false, nextSame = false, showName = false, reactions = [], onReact, privateLabel, lockedPhoto = false,
 }: Props) {
   const [reactOpen, setReactOpen] = useState<'quick' | 'all' | null>(null);
   const deleted = Boolean(m.deleted_at);
@@ -175,7 +191,7 @@ function MessageItemInner({
       <img src={m.gif_url} alt="GIF" loading="lazy" className="block max-h-[240px] w-auto max-w-[min(280px,68vw)]" />
     </button>
   );
-  const privateNote = privateLabel && !deleted && (
+  const privateNote = privateLabel && !deleted && !lockedPhoto && (
     <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-muted"><Lock size={11} /> {privateLabel}</div>
   );
 
@@ -216,7 +232,7 @@ function MessageItemInner({
                   {m.edited_at && <span className="ml-1.5 text-[11px] opacity-70">(edited)</span>}
                 </div>
               )}
-              {(m.image_path || m.localImage) && <ChatImage path={m.image_path} local={m.localImage} onOpen={onOpenImage} />}
+              {lockedPhoto ? <LockedImage blur={m.image_blur} label={privateLabel} /> : (m.image_path || m.localImage) && <ChatImage path={m.image_path} local={m.localImage} onOpen={onOpenImage} />}
               {gif}
               {privateNote}
             </>
@@ -266,7 +282,7 @@ function MessageItemInner({
                 {m.edited_at && <span className="ml-1.5 text-xs text-subtle">(edited)</span>}
               </p>
             )}
-            {(m.image_path || m.localImage) && <ChatImage path={m.image_path} local={m.localImage} onOpen={onOpenImage} />}
+            {lockedPhoto ? <LockedImage blur={m.image_blur} label={privateLabel} /> : (m.image_path || m.localImage) && <ChatImage path={m.image_path} local={m.localImage} onOpen={onOpenImage} />}
             {gif}
             {privateNote}
           </>

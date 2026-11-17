@@ -118,6 +118,8 @@ export interface Message {
   gif_url?: string | null;
   /** Group private photo: only this member (and the sender) can see it. */
   recipient_id?: string | null;
+  /** Tiny blurred preview of a private photo, shown to everyone else in the group. */
+  image_blur?: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
