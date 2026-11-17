@@ -829,7 +829,8 @@ end;
 $$;
 
 -- Every account. The login is the phone number; passwords are never readable.
-create or replace function public.admin_list_users()
+drop function if exists public.admin_list_users();
+create function public.admin_list_users()
 returns table (
   id uuid, login text, display_name text, avatar_url text, is_public boolean,
   created_at timestamptz, last_sign_in_at timestamptz, message_count bigint, reports_against bigint, is_admin boolean
