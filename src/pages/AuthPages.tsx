@@ -109,6 +109,7 @@ export function SignInPage() {
 }
 
 export function SignUpPage() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -117,13 +118,14 @@ export function SignUpPage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!name.trim()) return setError('Please enter your name.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
     setBusy(true);
     setError('');
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { emailRedirectTo: siteUrl() },
+      options: { emailRedirectTo: siteUrl(), data: { display_name: name.trim() } },
     });
     setBusy(false);
     if (error) return setError(errorMessage(error));
@@ -141,13 +143,16 @@ export function SignUpPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="All you need is an email and a password."
+      subtitle="Your email stays private. People only see your name."
       footer={<>Already have an account? <Link to="/login" className="font-medium text-accent hover:underline">Sign in</Link></>}
     >
       <form onSubmit={submit} className="space-y-4">
         {error && <ErrorBox text={error} />}
+        <Field label="Your name" hint="This is what everyone sees. You can change it later.">
+          <Input required maxLength={60} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </Field>
         <Field label="Email">
-          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Password" hint="At least 8 characters.">
           <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" />

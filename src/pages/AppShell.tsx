@@ -14,6 +14,7 @@ import { errorMessage, supabase } from '../lib/supabase';
 import type { ConversationSummary, Profile, Status } from '../lib/types';
 import { Avatar, IconButton, Logo, Menu, PresenceDot, SectionLabel, cx } from '../components/ui';
 import { NewChatDialog, NewGroupDialog } from '../components/NewConversationDialogs';
+import { ChooseNameDialog } from '../components/ChooseNameDialog';
 
 interface ShellApi {
   openNewChat: () => void;
@@ -49,6 +50,7 @@ export default function AppShell() {
           </main>
         </div>
       </div>
+      <ChooseNameDialog />
       <NewChatDialog open={dialog === 'chat'} onClose={() => setDialog(null)} />
       <NewGroupDialog open={dialog === 'group'} onClose={() => setDialog(null)} />
     </ShellContext.Provider>

@@ -154,7 +154,7 @@ declare
 begin
   v_name := nullif(trim(coalesce(new.raw_user_meta_data ->> 'display_name', '')), '');
   if v_name is null then
-    v_name := split_part(coalesce(new.email, 'user'), '@', 1);
+    v_name := 'New member';  -- never derived from the email, which stays private
   end if;
   insert into public.profiles (id, display_name) values (new.id, left(v_name, 60));
   insert into public.user_settings (user_id) values (new.id);

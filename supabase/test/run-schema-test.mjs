@@ -66,7 +66,7 @@ await db.exec(`
 
 console.log('\nProfiles');
 const p = await expectOk('signed-in user sees all profiles', A, 'select display_name from profiles order by display_name');
-if (p && p.rows.length === 3 && p.rows.some((r) => r.display_name === 'bob')) ok('signup trigger made profiles (bob from email)'); else bad('signup trigger', JSON.stringify(p?.rows));
+if (p && p.rows.length === 3 && p.rows.some((r) => r.display_name === 'New member') && !p.rows.some((r) => /bob/i.test(r.display_name))) ok('signup trigger made profiles; email never used as name'); else bad('signup trigger', JSON.stringify(p?.rows));
 const anonP = await as(null, 'select count(*)::int n from profiles').catch((e) => ({ err: e.message }));
 if (anonP.err) ok('signed-out visitor cannot read profiles'); else bad('anon profiles', JSON.stringify(anonP.rows));
 await expectOk('edit own description', A, `update profiles set description = 'Hi there' where id = '${A}'`);
