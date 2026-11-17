@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Flag, KeyRound, Lock, Search, ShieldAlert, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, FlaskConical, Flag, KeyRound, Lock, Pencil, Search, ShieldAlert, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { TestBadge, Textarea, Toggle } from '../components/ui';
+import { formatTime, sameDay } from '../lib/format';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatFullDate, formatListTime } from '../lib/format';
@@ -24,6 +26,29 @@ interface AdminUser {
   is_admin: boolean;
 }
 
+interface TestAccount {
+  id: string;
+  login: string;
+  display_name: string;
+  description: string;
+  avatar_url: string | null;
+  is_public: boolean;
+  message_count: number;
+}
+
+interface TestMessage {
+  id: string;
+  conversation_id: string;
+  conversation_name: string;
+  sender_id: string;
+  sender_name: string;
+  body: string;
+  image_path: string | null;
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+}
+
 interface AdminReport {
   id: string;
   created_at: string;
@@ -43,7 +68,10 @@ export default function AdminPage() {
   const { userId } = useMe();
   const toast = useToast();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'users' | 'reports'>('users');
+  const [tab, setTab] = useState<'users' | 'tests' | 'reports'>('users');
+  const [tests, setTests] = useState<TestAccount[] | null>(null);
+  const [testMsgs, setTestMsgs] = useState<TestMessage[] | null>(null);
+  const [editingTest, setEditingTest] = useState<TestAccount | null>(null);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [reports, setReports] = useState<AdminReport[] | null>(null);
   const [term, setTerm] = useState('');
@@ -51,7 +79,12 @@ export default function AdminPage() {
   const [resetting, setResetting] = useState<AdminUser | null>(null);
 
   const load = useCallback(async () => {
-    const [u, r] = await Promise.all([supabase.rpc('admin_list_users'), supabase.rpc('admin_list_reports')]);
+    const [u, r, ta, tm] = await Promise.all([
+      supabase.rpc('admin_list_users'), supabase.rpc('admin_list_reports'),
+      supabase.rpc('admin_list_test_accounts'), supabase.rpc('admin_list_test_messages'),
+    ]);
+    setTests(((ta.data as TestAccount[]) ?? []).map((x) => ({ ...x, message_count: Number(x.message_count) })));
+    setTestMsgs((tm.data as TestMessage[]) ?? []);
     if (u.error) toast(errorMessage(u.error), 'error');
     setUsers(((u.data as AdminUser[]) ?? []).map((x) => ({ ...x, message_count: Number(x.message_count), reports_against: Number(x.reports_against) })));
     setReports((r.data as AdminReport[]) ?? []);
@@ -91,7 +124,7 @@ export default function AdminPage() {
     setReports((list) => list?.filter((x) => x.id !== r.id) ?? null);
   }
 
-  const tabBtn = (id: 'users' | 'reports', label: string, count?: number) => (
+  const tabBtn = (id: 'users' | 'tests' | 'reports', label: string, count?: number) => (
     <button
       onClick={() => setTab(id)}
       className={cx('flex items-center gap-2 rounded-full px-4 py-2 text-sm', tab === id ? 'bg-accent-soft font-semibold text-on-accent-soft' : 'text-ink hover:bg-surface-2')}
@@ -109,6 +142,7 @@ export default function AdminPage() {
         <h1 className="text-[17px] font-semibold text-ink">Admin</h1>
         <div className="ml-4 flex gap-1">
           {tabBtn('users', 'Accounts', users?.length)}
+          {tabBtn('tests', 'Test accounts', tests?.length)}
           {tabBtn('reports', 'Reports', reports?.length)}
         </div>
       </header>
@@ -188,6 +222,43 @@ export default function AdminPage() {
           </>
         )}
 
+        {tab === 'tests' && (
+          tests === null ? (
+            <div className="flex justify-center py-12"><Spinner size={24} /></div>
+          ) : tests.length === 0 ? (
+            <EmptyState icon={<FlaskConical size={26} />} title="No test accounts" body="Run create-test-accounts.sql in Supabase to add them." />
+          ) : (
+            <div className="space-y-6">
+              <section>
+                <h2 className="mb-2 text-sm font-semibold text-ink">Test accounts</h2>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {tests.map((t) => (
+                    <div key={t.id} className="flex items-center gap-3 rounded-xl border border-line p-3">
+                      <Link to={`/u/${t.id}`}><Avatar src={t.avatar_url} name={t.display_name} seed={t.id} size={36} /></Link>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">{t.display_name}<TestBadge /></div>
+                        <div className="truncate text-xs text-muted">{t.login} · {t.message_count} messages</div>
+                      </div>
+                      <IconButton label={`Edit ${t.display_name}`} size={32} onClick={() => setEditingTest(t)}><Pencil size={15} /></IconButton>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <h2 className="mb-1 text-sm font-semibold text-ink">Messages sent by test accounts</h2>
+                <p className="mb-3 text-xs text-muted">Only messages written by test accounts are shown. Messages from real members are never shown here.</p>
+                {testMsgs && testMsgs.length > 0 ? (
+                  <div className="overflow-hidden rounded-2xl border border-line">
+                    {testMsgs.map((m) => <TestMessageRow key={m.id} m={m} onChanged={load} />)}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">No messages yet.</p>
+                )}
+              </section>
+            </div>
+          )
+        )}
+
         {tab === 'reports' && (
           reports === null ? (
             <div className="flex justify-center py-12"><Spinner size={24} /></div>
@@ -236,7 +307,105 @@ export default function AdminPage() {
         onConfirm={confirmDelete}
       />
       <SetPasswordDialog user={resetting} onClose={() => setResetting(null)} />
+      <EditTestAccountDialog account={editingTest} onClose={() => setEditingTest(null)} onSaved={load} />
     </div>
+  );
+}
+
+function TestMessageRow({ m, onChanged }: { m: TestMessage; onChanged: () => void }) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(m.body);
+  const [busy, setBusy] = useState(false);
+
+  async function save(remove = false) {
+    setBusy(true);
+    const { error } = await supabase.rpc('admin_edit_test_message', { p_message: m.id, p_body: draft, p_delete: remove });
+    setBusy(false);
+    if (error) return toast(errorMessage(error), 'error');
+    setEditing(false);
+    toast(remove ? 'Message deleted' : 'Message updated', 'success');
+    onChanged();
+  }
+
+  return (
+    <div className="border-t border-line px-4 py-3 first:border-t-0">
+      <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
+        <span className="font-semibold text-ink">{m.sender_name}</span>
+        <span>in {m.conversation_name}</span>
+        <span>· {sameDay(m.created_at, new Date().toISOString()) ? formatTime(m.created_at) : `${formatListTime(m.created_at)}, ${formatTime(m.created_at)}`}</span>
+        {m.edited_at && <span>· edited</span>}
+      </div>
+      {m.deleted_at ? (
+        <p className="mt-1 text-sm italic text-subtle">Deleted</p>
+      ) : editing ? (
+        <div className="mt-2">
+          <Textarea rows={2} value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={4000} />
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => { setEditing(false); setDraft(m.body); }}>Cancel</Button>
+            <Button size="sm" loading={busy} onClick={() => save(false)} disabled={!draft.trim()}>Save</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 flex items-start gap-2">
+          <p className="flex-1 whitespace-pre-wrap break-words text-sm text-ink">{m.body || (m.image_path ? '[Photo]' : '')}</p>
+          {m.body && <IconButton label="Edit message" size={30} onClick={() => setEditing(true)}><Pencil size={14} /></IconButton>}
+          <IconButton label="Delete message" size={30} className="hover:text-danger" onClick={() => save(true)}><Trash2 size={14} /></IconButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditTestAccountDialog({ account, onClose, onSaved }: { account: TestAccount | null; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (account) {
+      setName(account.display_name);
+      setBio(account.description);
+      setIsPublic(account.is_public);
+    }
+  }, [account]);
+
+  async function save() {
+    if (!account) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('admin_update_test_profile', { p_user: account.id, p_name: name, p_description: bio, p_is_public: isPublic });
+    setBusy(false);
+    if (error) return toast(errorMessage(error), 'error');
+    toast('Test account updated', 'success');
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal
+      open={Boolean(account)}
+      onClose={onClose}
+      title="Edit test account"
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy} disabled={!name.trim()}>Save</Button></>}
+    >
+      <div className="space-y-4">
+        <Field label="Name" hint='Test account names always start with "Test".'>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+        </Field>
+        <Field label="Description">
+          <Textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1000} />
+        </Field>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm text-ink">Public profile</div>
+            <div className="text-xs text-muted">Shown on the People page when on.</div>
+          </div>
+          <Toggle checked={isPublic} onChange={setIsPublic} label="Public profile" />
+        </div>
+        <p className="text-xs text-muted">To change photos, prompts and other details, sign in as this test account and use Edit profile.</p>
+      </div>
+    </Modal>
   );
 }
 

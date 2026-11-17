@@ -12,7 +12,7 @@ import { formatFullDate, plural, statusLabel } from '../../lib/format';
 import { ACCEPT_ATTR, getChatImageUrl, mediaPathFromUrl, removeMedia, uploadMedia, validateImage } from '../../lib/images';
 import { errorMessage, supabase } from '../../lib/supabase';
 import type { Conversation, Member, Message } from '../../lib/types';
-import { Avatar, Button, Field, IconButton, Input, Menu, Modal, Textarea, Toggle, cx } from '../ui';
+import { Avatar, Button, Field, IconButton, Input, Menu, Modal, TestBadge, Textarea, Toggle, cx } from '../ui';
 import { ConfirmDialog, ReportDialog } from '../Dialogs';
 import { EnterPinDialog, SetPinDialog, usePinStatus } from '../ChatPin';
 import { AddMembersDialog } from '../NewConversationDialogs';
@@ -153,7 +153,7 @@ function DirectDetails({ members, blockedByMe, onBlockedChange }: Props) {
       <Section>
         <div className="flex flex-col items-center pt-2 text-center">
           <Avatar src={p.avatar_url} name={p.display_name} seed={p.id} size={80} presence={presence} />
-          <h3 className="mt-3 text-base font-semibold text-ink">{p.display_name}</h3>
+          <h3 className="mt-3 flex items-center gap-2 text-base font-semibold text-ink">{p.display_name}{p.is_test && <TestBadge />}</h3>
           <p className="text-xs text-muted">{statusLabel(presence)}</p>
           {p.description && <p className="mt-3 line-clamp-4 whitespace-pre-wrap text-[13px] text-muted">{p.description}</p>}
           <Link to={`/u/${p.id}`} className="mt-4 inline-flex">
@@ -236,7 +236,7 @@ function GroupDetails({ conv, members, onMembersChanged }: Props) {
                 <Link to={`/u/${m.user_id}`} className="flex min-w-0 flex-1 items-center gap-3">
                   <Avatar src={p?.avatar_url} name={name} seed={m.user_id} size={34} presence={presenceOf(m.user_id, p?.status)} />
                   <div className="min-w-0">
-                    <div className="truncate text-sm text-ink">{name}{m.user_id === userId && <span className="text-muted"> (you)</span>}</div>
+                    <div className="flex items-center gap-1.5 truncate text-sm text-ink">{name}{m.user_id === userId && <span className="text-muted"> (you)</span>}{p?.is_test && <TestBadge />}</div>
                     {m.role !== 'member' && <div className="text-xs text-muted">{m.role === 'owner' ? 'Owner' : 'Admin'}</div>}
                   </div>
                 </Link>

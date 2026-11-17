@@ -12,6 +12,7 @@ export interface Profile {
   allow_messages_from: 'everyone' | 'nobody';
   show_read_receipts: boolean;
   is_public: boolean;
+  is_test?: boolean;
   created_at: string;
   updated_at: string;
 }

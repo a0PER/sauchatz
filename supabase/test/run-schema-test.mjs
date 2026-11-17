@@ -232,6 +232,27 @@ await expectOk('admin deletes Cara', A, `select admin_delete_user('${C}')`);
 const cGone = await db.query(`select count(*)::int n from auth.users where id = '${C}'`);
 if (cGone.rows[0].n === 0) ok('account removed'); else bad('not deleted');
 
+console.log('\nTest account admin tools');
+const T = '00000000-0000-0000-0000-0000000000ee';
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${T}', 'testguy1@test.sauchatz.app', '{"display_name":"Test Guy 1"}')`);
+const tp = await db.query(`select is_test from profiles where id = '${T}'`);
+if (tp.rows[0].is_test) ok('test account is flagged automatically'); else bad('not flagged');
+const g2 = (await as(A, `select create_group('Testers', '', array['${T}']::uuid[]) id`)).rows[0].id;
+await db.exec(`insert into messages (conversation_id, sender_id, body) values ('${g2}', '${T}', 'from test'), ('${g2}', '${A}', 'from a real person')`);
+const tm = await expectOk('admin lists test messages', A, `select * from admin_list_test_messages()`);
+if (tm && tm.rows.length === 1 && tm.rows[0].body === 'from test') ok('only messages sent by test accounts are shown'); else bad('test messages', JSON.stringify(tm?.rows));
+const tmid = tm.rows[0].id;
+await expectOk('admin edits a test message', A, `select admin_edit_test_message('${tmid}', 'edited by admin')`);
+const realId = (await db.query(`select id from messages where body = 'from a real person'`)).rows[0].id;
+await expectFail('admin cannot edit a real person message', A, `select admin_edit_test_message('${realId}', 'hacked')`);
+await expectOk('admin edits test profile', A, `select admin_update_test_profile('${T}', 'Guy Renamed', 'bio', true)`);
+const tn = await db.query(`select display_name from profiles where id = '${T}'`);
+if (tn.rows[0].display_name === 'Test Guy Renamed') ok('test names always keep the Test prefix'); else bad('prefix', tn.rows[0].display_name);
+await expectFail('admin cannot edit a real profile with test tools', A, `select admin_update_test_profile('${B}', 'x', 'y', true)`);
+await expectFail('non-admin cannot use test tools', B, `select * from admin_list_test_messages()`);
+const flagHack = await as(B, `update profiles set is_test = true where id = '${B}' returning id`).catch(() => 'blocked');
+if (flagHack === 'blocked') ok('people cannot mark themselves as test accounts'); else bad('is_test editable');
+
 console.log('\nAccount deletion');
 await expectOk('Bob deletes his account', B, 'select delete_my_account()');
 const gone = await db.query(`select count(*)::int n from conversations where id = '${gid}'`);
