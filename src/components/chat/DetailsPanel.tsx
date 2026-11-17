@@ -4,7 +4,7 @@ import {
   Ban, Bell, BellOff, Camera, Copy, Flag, Link2, Lock, RefreshCw, LogOut, MoreVertical, Pencil, ShieldCheck, ShieldOff, Trash2, User, UserMinus, UserPlus, X,
 } from 'lucide-react';
 import { MAX_GROUP_DESCRIPTION_LENGTH } from '../../config';
-import { useMe } from '../../contexts/AuthContext';
+import { useAuth, useMe } from '../../contexts/AuthContext';
 import { useChats } from '../../contexts/ChatContext';
 import { usePresence } from '../../contexts/PresenceContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -201,6 +201,7 @@ function GroupDetails({ conv, members, onMembersChanged }: Props) {
   const [adding, setAdding] = useState(false);
   const myRole = members.find((m) => m.user_id === userId)?.role ?? 'member';
   const isAdmin = myRole === 'owner' || myRole === 'admin';
+  const { isAdmin: isSiteAdmin } = useAuth();
   const sorted = [...members].sort(
     (a, b) => roleOrder[a.role] - roleOrder[b.role] || (a.profile?.display_name ?? '').localeCompare(b.profile?.display_name ?? ''),
   );
@@ -229,7 +230,7 @@ function GroupDetails({ conv, members, onMembersChanged }: Props) {
       </Section>
       <Section
         title={plural(members.length, 'member')}
-        action={isAdmin && <Button size="sm" variant="ghost" icon={<UserPlus size={15} />} onClick={() => setAdding(true)}>Add</Button>}
+        action={(isAdmin || isSiteAdmin) && <Button size="sm" variant="ghost" icon={<UserPlus size={15} />} onClick={() => setAdding(true)}>Add</Button>}
       >
         <ul className="-mx-2">
           {sorted.map((m) => {

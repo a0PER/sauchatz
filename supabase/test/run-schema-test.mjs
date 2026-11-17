@@ -237,6 +237,7 @@ console.log('\nInvites and private contacts');
 const D = '00000000-0000-0000-0000-0000000000dd';
 await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${D}', 'dana@example.com', '{"display_name":"Dana"}')`);
 await db.exec(`update profiles set is_public = false where id = '${D}'`);
+await db.exec(`delete from admins where user_id = '${A}'`); // these checks are for a regular member
 const ig = (await as(A, `select create_group('Invite test', '', array['${D}']::uuid[]) id`)).rows[0].id;
 const notAdded = await db.query(`select count(*)::int n from conversation_members where conversation_id = '${ig}' and user_id = '${D}'`);
 if (notAdded.rows[0].n === 0) ok('cannot add a private stranger to a group'); else bad('private stranger added');
@@ -246,6 +247,7 @@ if (pc.rows.some((r) => r.display_name === 'Dana')) ok('private person who messa
 await expectOk('add the private contact to the group', A, `select add_group_members('${ig}', array['${D}']::uuid[])`);
 const added = await db.query(`select count(*)::int n from conversation_members where conversation_id = '${ig}' and user_id = '${D}'`);
 if (added.rows[0].n === 1) ok('private contact added'); else bad('not added');
+await db.exec(`insert into admins (user_id) values ('${A}')`);
 const code = (await as(A, `select get_group_invite('${ig}') c`)).rows[0].c;
 if (code && code.length >= 12) ok('invite link created'); else bad('no code');
 await expectFail('regular members cannot make invite links', D, `select get_group_invite('${ig}')`);
@@ -330,6 +332,25 @@ await expectOk('admin uploads into their folder', A, `insert into storage.object
 await expectFail('regular members cannot upload into another folder', B, `insert into storage.objects (bucket_id, name) values ('media', 'users/${D}/photos/b.jpg')`);
 await expectOk('admin removes the photo', A, `delete from profile_photos where user_id = '${D}'`);
 await db.exec(`update profiles set is_public = true, name_locked = false where id = '${D}'`);
+
+console.log('\nAdmins add private profiles to groups');
+const P2 = '00000000-0000-0000-0000-0000000000e7';
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${P2}', 'priv@example.com', '{"display_name":"Private Pat"}')`);
+await db.exec(`update profiles set is_public = false where id = '${P2}'`);
+const bg = (await as(B, `select create_group('Bob group', '', array['${A}']::uuid[]) id`)).rows[0].id;
+await as(B, `select add_group_members('${bg}', array['${P2}']::uuid[])`);
+const notIn = (await db.query(`select count(*)::int n from conversation_members where conversation_id = '${bg}' and user_id = '${P2}'`)).rows[0].n;
+if (notIn === 0) ok('regular members still cannot add private strangers'); else bad('private add leak');
+const ac = await as(A, `select display_name from my_private_contacts('Pat')`);
+if (ac.rows.some((r) => r.display_name === 'Private Pat')) ok('site admin sees every private profile when adding'); else bad('admin contacts', JSON.stringify(ac.rows));
+const bc = await as(B, `select display_name from my_private_contacts('Pat')`);
+if (bc.rows.length === 0) ok('regular members do not see private strangers'); else bad('contacts leak');
+await expectOk('site admin adds a private person to a group (not a group admin there)', A, `select add_group_members('${bg}', array['${P2}']::uuid[])`);
+const isIn = (await db.query(`select count(*)::int n from conversation_members where conversation_id = '${bg}' and user_id = '${P2}'`)).rows[0].n;
+if (isIn === 1) ok('private person was added'); else bad('admin add failed');
+const ag2 = (await as(A, `select create_group('Admin group', '', array['${P2}']::uuid[]) id`)).rows[0].id;
+const isIn2 = (await db.query(`select count(*)::int n from conversation_members where conversation_id = '${ag2}' and user_id = '${P2}'`)).rows[0].n;
+if (isIn2 === 1) ok('site admin can create a group with private people'); else bad('admin create');
 
 console.log('\nEmail verification');
 const X = D;
