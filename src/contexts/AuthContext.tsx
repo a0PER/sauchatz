@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { cacheProfile } from '../lib/profileCache';
 import type { Profile, ProfileDetails, Theme, UserSettings } from '../lib/types';
+import { applyLayout, cachedLayout, readLayout } from '../lib/layout';
 
 interface AuthState {
   session: Session | null;
@@ -61,11 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     const [{ data: p }, { data: s }, { data: d }, { data: admin }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('user_settings').select('user_id, theme, notify_desktop, notify_sound, enter_to_send, phone').eq('user_id', userId).single(),
+      supabase.from('user_settings').select('user_id, theme, notify_desktop, notify_sound, enter_to_send, phone, layout').eq('user_id', userId).single(),
       supabase.from('profile_details').select('*').eq('user_id', userId).maybeSingle(),
       supabase.rpc('am_i_admin'),
     ]);
-    setDetails((d as ProfileDetails | null) ?? { user_id: userId, birth_date: null, class_year: null, major: null, hometown: null, here_for: [], interests: [], prompts: [] });
+    setDetails((d as ProfileDetails | null) ?? { user_id: userId, birth_date: null, class_year: null, major: null, hometown: null, here_for: [], interests: [], prompts: [], hidden_fields: [] });
     setIsAdmin(Boolean(admin));
     if (p) {
       setProfile(p as Profile);
@@ -81,13 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [userId, refreshProfile]);
 
   // Theme: use the saved setting, fall back to the last one used on this device.
+  // Layout (accent color, text size): apply whenever it or the theme changes.
+  const layout = settings ? readLayout(settings.layout) : cachedLayout();
+  const layoutNow = useRef(layout);
+  layoutNow.current = layout;
+  const layoutKey = JSON.stringify(layout);
+  useEffect(() => { applyLayout(layoutNow.current); }, [layoutKey]);
+
   const theme: Theme = settings?.theme ?? ((localStorage.getItem(THEME_KEY) as Theme | null) || 'system');
   useEffect(() => {
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage unavailable */ }
     applyTheme(theme);
+    applyLayout(layoutNow.current);
     if (theme !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => applyTheme('system');
+    const onChange = () => { applyTheme('system'); applyLayout(layoutNow.current); };
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, [theme]);

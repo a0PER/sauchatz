@@ -30,6 +30,19 @@ export interface ProfileDetails {
   here_for: string[];
   interests: string[];
   prompts: ProfilePrompt[];
+  hidden_fields: string[];
+}
+
+/** What another member sees: age instead of birthday, hidden items removed. */
+export interface PublicDetails {
+  user_id: string;
+  age: number | null;
+  class_year: string | null;
+  major: string | null;
+  hometown: string | null;
+  here_for: string[];
+  interests: string[];
+  prompts: ProfilePrompt[];
 }
 
 export interface UserSettings {
@@ -39,6 +52,7 @@ export interface UserSettings {
   notify_sound: boolean;
   enter_to_send: boolean;
   phone: string | null;
+  layout: Record<string, unknown>;
 }
 
 export interface ProfilePhoto {

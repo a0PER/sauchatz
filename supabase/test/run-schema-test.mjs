@@ -157,7 +157,7 @@ console.log('\nPrivate profiles');
 await expectOk('Cara writes profile details', C, `update profile_details set major = 'Nursing', interests = array['Hiking'] where user_id = '${C}'`);
 await expectOk('Cara adds a photo', C, `insert into profile_photos (user_id, storage_path, url) values ('${C}', 'x', 'y')`);
 await expectOk('Cara makes her profile private', C, `update profiles set is_public = false where id = '${C}'`);
-const cd = await as(A, `select count(*)::int n from profile_details where user_id = '${C}'`);
+const cd = await as(A, `select count(*)::int n from get_profile_details('${C}')`);
 const cp = await as(A, `select count(*)::int n from profile_photos where user_id = '${C}'`);
 if (cd.rows[0].n === 0 && cp.rows[0].n === 0) ok('stranger cannot see a private profile details or photos'); else bad('private profile leak');
 const ad = await as(A, `select count(*)::int n from profile_details where user_id = '${A}'`);
@@ -166,6 +166,25 @@ await expectFail('under 18 birthday rejected', A, `update profile_details set bi
 await expectOk('18+ birthday accepted', A, `update profile_details set birth_date = '2004-05-01' where user_id = '${A}'`);
 const bEditD = await as(B, `update profile_details set major = 'x' where user_id = '${A}' returning user_id`).catch(() => ({ rows: [] }));
 if (bEditD.rows.length === 0) ok('details edits limited to owner'); else bad('edited other details');
+
+console.log('\nPer-item privacy');
+await expectOk('Alice adds details', A, `update profile_details set major = 'Biology', hometown = 'Dalton, GA' where user_id = '${A}'`);
+await expectOk('Alice hides age and hometown', A, `update profile_details set hidden_fields = array['age','hometown'] where user_id = '${A}'`);
+const seen = (await as(B, `select * from get_profile_details('${A}')`)).rows[0];
+if (seen && seen.age === null && seen.hometown === null && seen.major === 'Biology') ok('hidden items removed, visible items shown'); else bad('per-item privacy', JSON.stringify(seen));
+const direct = await as(B, `select count(*)::int n from profile_details where user_id = '${A}'`);
+if (direct.rows[0].n === 0) ok('others cannot read the details table (or exact birthday) directly'); else bad('direct read');
+await expectFail('unknown privacy item rejected', A, `update profile_details set hidden_fields = array['shoe_size'] where user_id = '${A}'`);
+await expectOk('Alice adds a gallery photo', A, `insert into profile_photos (user_id, storage_path, url) values ('${A}', 'p', 'u')`);
+await expectOk('Alice hides photos', A, `update profile_details set hidden_fields = array['photos'] where user_id = '${A}'`);
+const bp = await as(B, `select count(*)::int n from profile_photos where user_id = '${A}'`);
+const ap = await as(A, `select count(*)::int n from profile_photos where user_id = '${A}'`);
+if (bp.rows[0].n === 0 && ap.rows[0].n >= 1) ok('hidden photos only visible to the owner'); else bad('photo privacy');
+const ageShown = await as(A, `update profile_details set hidden_fields = '{}' where user_id = '${A}'; select age from get_profile_details('${A}')`).catch(() => null);
+await as(A, `update profile_details set hidden_fields = '{}' where user_id = '${A}'`);
+const age = (await as(B, `select age from get_profile_details('${A}')`)).rows[0].age;
+if (age >= 18) ok('age shown (not birthday) when visible'); else bad('age', age);
+await expectOk('save layout settings', A, `update user_settings set layout = '{"accent":"teal","density":"compact"}' where user_id = '${A}'`);
 
 console.log('\nChat PIN lock');
 const pinDm = (await as(A, `select get_or_create_direct('${B}') id`)).rows[0].id;

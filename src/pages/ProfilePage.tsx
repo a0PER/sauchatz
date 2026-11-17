@@ -10,7 +10,23 @@ import { formatFullDate, statusLabel } from '../lib/format';
 import { cacheProfile } from '../lib/profileCache';
 import { ageFrom } from '../lib/profileOptions';
 import { errorMessage, supabase } from '../lib/supabase';
-import type { Profile, ProfileDetails, ProfilePhoto } from '../lib/types';
+import type { Profile, ProfileDetails, ProfilePhoto, ProfilePrompt, PublicDetails } from '../lib/types';
+
+interface ViewDetails {
+  age: number | null;
+  class_year: string | null;
+  major: string | null;
+  hometown: string | null;
+  here_for: string[];
+  interests: string[];
+  prompts: ProfilePrompt[];
+  hidden: string[];
+}
+
+const ITEM_LABELS: Record<string, string> = {
+  age: 'Age', class_year: 'Class year', major: 'Major', hometown: 'Hometown', here_for: 'Here for',
+  interests: 'Interests', prompts: 'Prompts', photos: 'Photos',
+};
 import { Avatar, Button, EmptyState, IconButton, Menu, PresenceDot, Spinner, cx } from '../components/ui';
 import { ConfirmDialog, ReportDialog } from '../components/Dialogs';
 import { Lightbox } from '../components/Lightbox';
@@ -42,7 +58,7 @@ export default function ProfilePage() {
   const isMe = id === userId;
 
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [details, setDetails] = useState<ProfileDetails | null>(null);
+  const [details, setDetails] = useState<ViewDetails | null>(null);
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const [canView, setCanView] = useState(true);
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
@@ -60,11 +76,20 @@ export default function ProfilePage() {
     const visible = isMe || (p as Profile).is_public || Boolean((await supabase.rpc('shares_conversation', { other: id })).data);
     setCanView(visible);
     const [{ data: d }, { data: ph }, { data: b }] = await Promise.all([
-      supabase.from('profile_details').select('*').eq('user_id', id).maybeSingle(),
+      isMe
+        ? supabase.from('profile_details').select('*').eq('user_id', id).maybeSingle()
+        : supabase.rpc('get_profile_details', { p_user: id }).maybeSingle(),
       supabase.from('profile_photos').select('*').eq('user_id', id).order('created_at', { ascending: true }),
       isMe ? Promise.resolve({ data: null }) : supabase.from('blocks').select('blocked_id').eq('blocked_id', id).maybeSingle(),
     ]);
-    setDetails((d as ProfileDetails | null) ?? null);
+    if (!d) setDetails(null);
+    else if (isMe) {
+      const own = d as ProfileDetails;
+      setDetails({ ...own, age: ageFrom(own.birth_date), hidden: own.hidden_fields ?? [] });
+    } else {
+      const pub = d as PublicDetails;
+      setDetails({ ...pub, prompts: pub.prompts ?? [], here_for: pub.here_for ?? [], interests: pub.interests ?? [], hidden: [] });
+    }
     setPhotos((ph as ProfilePhoto[] | null) ?? []);
     setBlocked(Boolean(b));
     setState('ready');
@@ -110,7 +135,7 @@ export default function ProfilePage() {
   }
 
   const presence = presenceOf(profile.id, profile.status);
-  const age = ageFrom(details?.birth_date);
+  const age = details?.age ?? null;
   const firstName = profile.display_name.split(' ')[0];
   const prompts = (details?.prompts ?? []).filter((p) => p.answer?.trim());
   const lightboxItems = photos.map((p) => ({ src: p.url, caption: p.caption, meta: formatFullDate(p.created_at) }));
@@ -219,6 +244,13 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 px-1">{actions}</div>
+
+          {isMe && (details?.hidden.length ?? 0) > 0 && (
+            <Link to="/profile/edit" className="flex items-center gap-2.5 rounded-2xl bg-surface-2 px-4 py-3 text-[13px] text-muted hover:text-ink">
+              <Lock size={15} className="shrink-0" />
+              <span>Hidden from others: {details!.hidden.map((h) => ITEM_LABELS[h] ?? h).join(', ')}. Only you can see these.</span>
+            </Link>
+          )}
 
           {!canView ? (
             <Card className="text-center">

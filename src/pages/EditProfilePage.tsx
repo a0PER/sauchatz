@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Camera, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
 import { MAX_DESCRIPTION_LENGTH } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -13,13 +13,35 @@ import type { ProfilePhoto, ProfilePrompt } from '../lib/types';
 import { Avatar, Button, Field, IconButton, Input, Spinner, Textarea, Toggle, cx } from '../components/ui';
 import { isAdult } from '../components/ChooseNameDialog';
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+function Section({ title, description, children, action }: { title: string; description?: string; children: ReactNode; action?: ReactNode }) {
   return (
     <section className="rounded-3xl border border-line bg-surface p-5 sm:p-6">
-      <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        {action}
+      </div>
       {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+/** Small switch between "Everyone" and "Only me" for one profile item. */
+function Visibility({ hidden, onChange, label }: { hidden: boolean; onChange: (hidden: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!hidden)}
+      aria-label={`${label}: ${hidden ? 'only me' : 'everyone'}. Click to change.`}
+      title={hidden ? 'Only you can see this' : 'Everyone who can see your profile can see this'}
+      className={cx(
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+        hidden ? 'border-line-strong bg-surface-2 text-muted' : 'border-transparent bg-accent-soft text-on-accent-soft',
+      )}
+    >
+      {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+      {hidden ? 'Only me' : 'Everyone'}
+    </button>
   );
 }
 
@@ -55,6 +77,9 @@ export default function EditProfilePage() {
   const [interests, setInterests] = useState<string[]>(details?.interests ?? []);
   const [interestInput, setInterestInput] = useState('');
   const [prompts, setPrompts] = useState<ProfilePrompt[]>(details?.prompts ?? []);
+  const [hidden, setHidden] = useState<string[]>(details?.hidden_fields ?? []);
+  const isHidden = (k: string) => hidden.includes(k);
+  const setItem = (k: string) => (h: boolean) => setHidden((list) => (h ? [...list.filter((x) => x !== k), k] : list.filter((x) => x !== k)));
   const [photos, setPhotos] = useState<ProfilePhoto[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -134,6 +159,7 @@ export default function EditProfilePage() {
         here_for: hereFor,
         interests,
         prompts: prompts.filter((p) => p.answer.trim()).map((p) => ({ question: p.question, answer: p.answer.trim().slice(0, 300) })),
+        hidden_fields: hidden,
       });
       toast('Profile saved', 'success');
       navigate(`/u/${userId}`);
@@ -163,7 +189,7 @@ export default function EditProfilePage() {
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto bg-bg/50">
         <div className="mx-auto max-w-xl space-y-4 px-4 pb-24 pt-6 sm:px-6">
-          <Section title="Photos" description="Your main picture shows first. Add up to 9 more; they appear between your prompts.">
+          <Section title="Photos" description="Your main picture is always shown. Add up to 9 more; they appear between your prompts." action={<Visibility hidden={isHidden('photos')} onChange={setItem('photos')} label="Extra photos" />}>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => avatarPicker.current?.click()}
@@ -208,27 +234,39 @@ export default function EditProfilePage() {
             <input ref={galleryPicker} type="file" accept={ACCEPT_ATTR} multiple hidden onChange={(e) => { addPhotos(e.target.files); e.target.value = ''; }} />
           </Section>
 
-          <Section title="The basics">
+          <Section title="The basics" description="Choose who sees each item. Your exact birthday is never shown, only your age.">
             <div className="space-y-4">
               <Field label="Name">
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
+                <div>
                 <Field label="Birthday" hint={age !== null ? `Shown as your age: ${age}` : 'Only your age is shown.'}>
                   <Input type="date" value={birth} max={maxDate.toISOString().slice(0, 10)} onChange={(e) => setBirth(e.target.value)} />
                 </Field>
+                  <div className="mt-2"><Visibility hidden={isHidden('age')} onChange={setItem('age')} label="Age" /></div>
+                </div>
+                <div>
                 <Field label="Class year">
                   <select value={classYear} onChange={(e) => setClassYear(e.target.value)} className={selectClass}>
                     <option value="">Choose</option>
                     {CLASS_YEARS.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
+                  <div className="mt-2"><Visibility hidden={isHidden('class_year')} onChange={setItem('class_year')} label="Class year" /></div>
+                </div>
+                <div>
                 <Field label="Major">
                   <Input value={major} onChange={(e) => setMajor(e.target.value)} maxLength={80} placeholder="e.g. Nursing" />
                 </Field>
+                  <div className="mt-2"><Visibility hidden={isHidden('major')} onChange={setItem('major')} label="Major" /></div>
+                </div>
+                <div>
                 <Field label="Hometown">
                   <Input value={hometown} onChange={(e) => setHometown(e.target.value)} maxLength={80} placeholder="e.g. Orlando, FL" />
                 </Field>
+                  <div className="mt-2"><Visibility hidden={isHidden('hometown')} onChange={setItem('hometown')} label="Hometown" /></div>
+                </div>
               </div>
             </div>
           </Section>
@@ -239,7 +277,7 @@ export default function EditProfilePage() {
             </Field>
           </Section>
 
-          <Section title="Here for" description="Pick what you are open to.">
+          <Section title="Here for" description="Pick what you are open to." action={<Visibility hidden={isHidden('here_for')} onChange={setItem('here_for')} label="Here for" />}>
             <div className="flex flex-wrap gap-2">
               {HERE_FOR.map((h) => (
                 <ToggleChip key={h} on={hereFor.includes(h)} onClick={() => setHereFor(hereFor.includes(h) ? hereFor.filter((x) => x !== h) : [...hereFor, h])}>{h}</ToggleChip>
@@ -247,7 +285,7 @@ export default function EditProfilePage() {
             </div>
           </Section>
 
-          <Section title="Interests" description={`Up to ${MAX_INTERESTS}. Tap a suggestion or type your own.`}>
+          <Section title="Interests" description={`Up to ${MAX_INTERESTS}. Tap a suggestion or type your own.`} action={<Visibility hidden={isHidden('interests')} onChange={setItem('interests')} label="Interests" />}>
             {interests.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {interests.map((t) => (
@@ -278,7 +316,7 @@ export default function EditProfilePage() {
             </div>
           </Section>
 
-          <Section title="Prompts" description={`Answer up to ${MAX_PROMPTS}. They are the best conversation starters.`}>
+          <Section title="Prompts" description={`Answer up to ${MAX_PROMPTS}. They are the best conversation starters.`} action={<Visibility hidden={isHidden('prompts')} onChange={setItem('prompts')} label="Prompts" />}>
             <div className="space-y-3">
               {prompts.map((p, i) => (
                 <div key={i} className="rounded-2xl border border-line p-4">

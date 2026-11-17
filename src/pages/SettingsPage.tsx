@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Bell, ChevronRight, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
+import { ArrowLeft, Bell, Check, ChevronRight, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
+import { ACCENTS, readLayout, type Accent, type Density, type Layout, type MessageStyle, type TextSize } from '../lib/layout';
 import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -18,7 +19,7 @@ const SECTIONS: { id: SectionId; label: string; icon: ReactNode }[] = [
   { id: 'profile', label: 'Profile and status', icon: <User size={18} /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
   { id: 'privacy', label: 'Privacy and safety', icon: <Shield size={18} /> },
-  { id: 'appearance', label: 'Chat and appearance', icon: <Palette size={18} /> },
+  { id: 'appearance', label: 'Layout and appearance', icon: <Palette size={18} /> },
 ];
 
 export default function SettingsPage() {
@@ -438,8 +439,99 @@ function AppearanceSection() {
     { value: 'dark', label: 'Dark', icon: <Moon size={18} /> },
   ];
 
+  const layout = readLayout(settings.layout);
+  const setLayout = (patch: Partial<Layout>) => set({ layout: { ...layout, ...patch } });
+  const seg = (on: boolean) => cx(
+    'flex-1 rounded-lg px-3 py-2 text-sm transition-colors',
+    on ? 'bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.12)]' : 'text-muted hover:text-ink',
+  );
+
   return (
     <>
+      <Card title="Accent color" description="Used for buttons, highlights and your own message bubbles.">
+        <div className="flex flex-wrap gap-3">
+          {(Object.keys(ACCENTS) as Accent[]).map((a) => {
+            const dark = document.documentElement.classList.contains('dark');
+            const color = ACCENTS[a][dark ? 'dark' : 'light'].accent;
+            return (
+              <button
+                key={a}
+                onClick={() => setLayout({ accent: a })}
+                className="flex flex-col items-center gap-1.5 text-xs text-muted"
+                aria-label={`${ACCENTS[a].label} accent`}
+                aria-pressed={layout.accent === a}
+              >
+                <span
+                  className={cx('flex size-10 items-center justify-center rounded-full ring-offset-2 ring-offset-surface', layout.accent === a && 'ring-2 ring-ink')}
+                  style={{ background: color }}
+                >
+                  {layout.accent === a && <Check size={18} className="text-white mix-blend-difference" />}
+                </span>
+                {ACCENTS[a].label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Layout">
+        <div className="space-y-5">
+          <div>
+            <div className="mb-2 text-sm text-ink">Text size</div>
+            <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
+              {([['small', 'Small'], ['default', 'Default'], ['large', 'Large']] as [TextSize, string][]).map(([v, l]) => (
+                <button key={v} className={seg(layout.textSize === v)} onClick={() => setLayout({ textSize: v })}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-sm text-ink">Spacing</div>
+            <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
+              {([['comfortable', 'Comfortable'], ['compact', 'Compact']] as [Density, string][]).map(([v, l]) => (
+                <button key={v} className={seg(layout.density === v)} onClick={() => setLayout({ density: v })}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-sm text-ink">Message style</div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {([['classic', 'Classic', 'Names and messages in a list'], ['bubbles', 'Bubbles', 'Your messages on the right']] as [MessageStyle, string, string][]).map(([v, l, d]) => (
+                <button
+                  key={v}
+                  onClick={() => setLayout({ messageStyle: v })}
+                  className={cx('rounded-xl border p-3 text-left transition-colors', layout.messageStyle === v ? 'border-accent bg-accent-soft/50' : 'border-line hover:bg-surface-2')}
+                >
+                  <div className="mb-2.5 space-y-1.5 rounded-lg bg-surface-2 p-2.5">
+                    {v === 'classic' ? (
+                      <>
+                        <div className="flex gap-1.5"><span className="size-3 rounded-full bg-subtle/60" /><span className="h-2 w-16 rounded bg-subtle/50" /></div>
+                        <div className="ml-[18px] h-2 w-24 rounded bg-subtle/30" />
+                        <div className="flex gap-1.5"><span className="size-3 rounded-full bg-accent/70" /><span className="h-2 w-12 rounded bg-subtle/50" /></div>
+                        <div className="ml-[18px] h-2 w-20 rounded bg-subtle/30" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="h-3.5 w-20 rounded-full bg-surface-3" />
+                        <div className="ml-auto h-3.5 w-16 rounded-full bg-accent/80" />
+                        <div className="h-3.5 w-24 rounded-full bg-surface-3" />
+                        <div className="ml-auto h-3.5 w-12 rounded-full bg-accent/80" />
+                      </>
+                    )}
+                  </div>
+                  <div className="text-sm font-medium text-ink">{l}</div>
+                  <div className="text-xs text-muted">{d}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <Row
+            title="Message previews"
+            description="Show the latest message under each chat in the sidebar."
+            control={<Toggle checked={layout.previews} onChange={(v) => setLayout({ previews: v })} label="Message previews" />}
+          />
+        </div>
+      </Card>
+
       <Card title="Theme">
         <div className="grid grid-cols-3 gap-2.5">
           {themes.map((t) => (

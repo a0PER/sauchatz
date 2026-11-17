@@ -63,11 +63,20 @@ interface Props {
   onCopy: () => void;
   onOpenImage: (src: string) => void;
   footer?: ReactNode;
+  /** Bubble layout instead of the classic list. */
+  bubbles?: boolean;
+  /** Compact spacing setting. */
+  dense?: boolean;
+  /** The next message is from the same sender (bubbles group together). */
+  nextSame?: boolean;
+  /** Show sender names above bubbles (groups). */
+  showName?: boolean;
 }
 
 function MessageItemInner({
   message: m, sender, mine, compact, editing, enterToSend,
   onStartEdit, onCancelEdit, onSaveEdit, onDelete, onReport, onCopy, onOpenImage, footer,
+  bubbles = false, dense = false, nextSame = false, showName = false,
 }: Props) {
   const deleted = Boolean(m.deleted_at);
   const name = sender?.display_name ?? 'Deleted user';
@@ -86,17 +95,93 @@ function MessageItemInner({
 
   const actionBtn = 'flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink';
 
+  const editor = (
+    <div className="mt-1 w-full max-w-2xl">
+      <Textarea
+        ref={editRef}
+        rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancelEdit();
+          const send = enterToSend ? e.key === 'Enter' && !e.shiftKey : e.key === 'Enter' && (e.metaKey || e.ctrlKey);
+          if (send) { e.preventDefault(); if (draft.trim() || m.image_path) onSaveEdit(draft.trim()); }
+        }}
+      />
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" variant="secondary" onClick={onCancelEdit}>Cancel</Button>
+        <Button size="sm" onClick={() => onSaveEdit(draft.trim())} disabled={!draft.trim() && !m.image_path}>Save</Button>
+      </div>
+    </div>
+  );
+
+  const actions = !deleted && !editing && !m.pending && (
+    <div className={cx(
+      'absolute -top-3 z-10 hidden items-center gap-0.5 rounded-lg border border-line bg-surface p-0.5 shadow-panel group-hover:flex group-focus-within:flex',
+      bubbles && mine ? 'left-5' : 'right-5',
+    )}>
+      {m.body && <button className={actionBtn} onClick={onCopy} title="Copy text" aria-label="Copy text"><Copy size={15} /></button>}
+      {mine && Boolean(m.body) && <button className={actionBtn} onClick={onStartEdit} title="Edit" aria-label="Edit message"><Pencil size={15} /></button>}
+      {mine && <button className={cx(actionBtn, 'hover:text-danger')} onClick={onDelete} title="Delete" aria-label="Delete message"><Trash2 size={15} /></button>}
+      {!mine && sender && <button className={cx(actionBtn, 'hover:text-danger')} onClick={onReport} title="Report" aria-label="Report message"><Flag size={15} /></button>}
+    </div>
+  );
+
+  /* ---------- Bubble style ---------- */
+  if (bubbles) {
+    const gap = compact ? (dense ? 'pt-0.5' : 'pt-1') : dense ? 'pt-2' : 'pt-3';
+    return (
+      <div className={cx('group relative flex gap-2 px-4 sm:px-5', mine ? 'flex-row-reverse' : '', gap, m.pending && 'opacity-70')}>
+        {!mine && (
+          <div className="w-8 shrink-0 self-end">
+            {!nextSame && (sender ? (
+              <Link to={`/u/${sender.id}`} aria-label={`View ${name}`}><Avatar src={sender.avatar_url} name={name} seed={sender.id} size={30} /></Link>
+            ) : <Avatar name="?" size={30} />)}
+          </div>
+        )}
+        <div className={cx('flex min-w-0 max-w-[78%] flex-col sm:max-w-[65%]', mine ? 'items-end' : 'items-start')}>
+          {!mine && !compact && showName && (
+            <span className="mb-0.5 ml-3 text-xs font-medium text-muted">{name}</span>
+          )}
+          {deleted ? (
+            <p className="rounded-2xl border border-line px-3.5 py-2 text-sm italic text-subtle">This message was deleted</p>
+          ) : editing ? editor : (
+            <>
+              {m.body && (
+                <div
+                  className={cx(
+                    'whitespace-pre-wrap break-words rounded-[20px] px-3.5 py-2 text-[14.5px] leading-[1.45]',
+                    mine ? 'bg-accent text-on-accent [&_a]:text-on-accent' : 'bg-surface-2 text-ink',
+                    mine ? (nextSame ? 'rounded-br-md' : '') : nextSame ? 'rounded-bl-md' : '',
+                  )}
+                >
+                  {linkify(m.body)}
+                  {m.edited_at && <span className="ml-1.5 text-[11px] opacity-70">(edited)</span>}
+                </div>
+              )}
+              {(m.image_path || m.localImage) && <ChatImage path={m.image_path} local={m.localImage} onOpen={onOpenImage} />}
+            </>
+          )}
+          {!nextSame && <span className="mx-2 mt-0.5 text-[11px] text-subtle">{formatTime(m.created_at)}</span>}
+          {footer}
+        </div>
+        {actions}
+      </div>
+    );
+  }
+
+  /* ---------- Classic style ---------- */
   return (
-    <div className={cx('group relative flex gap-3 px-5 hover:bg-surface-2/60', compact ? 'pt-0.5' : 'pt-3', m.pending && 'opacity-70')}>
+    <div className={cx('group relative flex gap-3 px-5 hover:bg-surface-2/60', compact ? 'pt-0.5' : dense ? 'pt-1.5' : 'pt-3', m.pending && 'opacity-70')}>
       <div className="w-9 shrink-0">
         {compact ? (
           <span className="invisible block pt-[3px] text-right text-[10px] text-subtle group-hover:visible">{formatTime(m.created_at)}</span>
         ) : sender ? (
           <Link to={`/u/${sender.id}`} aria-label={`View ${name}`}>
-            <Avatar src={sender.avatar_url} name={name} seed={sender.id} size={36} />
+            <Avatar src={sender.avatar_url} name={name} seed={sender.id} size={dense ? 30 : 36} />
           </Link>
         ) : (
-          <Avatar name="?" size={36} />
+          <Avatar name="?" size={dense ? 30 : 36} />
         )}
       </div>
       <div className="min-w-0 flex-1 pb-0.5">
@@ -112,25 +197,7 @@ function MessageItemInner({
         )}
         {deleted ? (
           <p className="text-sm italic text-subtle">This message was deleted</p>
-        ) : editing ? (
-          <div className="mt-1 max-w-2xl">
-            <Textarea
-              ref={editRef}
-              rows={Math.min(8, Math.max(2, draft.split('\n').length))}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') onCancelEdit();
-                const send = enterToSend ? e.key === 'Enter' && !e.shiftKey : e.key === 'Enter' && (e.metaKey || e.ctrlKey);
-                if (send) { e.preventDefault(); if (draft.trim() || m.image_path) onSaveEdit(draft.trim()); }
-              }}
-            />
-            <div className="mt-2 flex gap-2">
-              <Button size="sm" variant="secondary" onClick={onCancelEdit}>Cancel</Button>
-              <Button size="sm" onClick={() => onSaveEdit(draft.trim())} disabled={!draft.trim() && !m.image_path}>Save</Button>
-            </div>
-          </div>
-        ) : (
+        ) : editing ? editor : (
           <>
             {m.body && (
               <p className="whitespace-pre-wrap break-words text-[14.5px] leading-[1.5] text-ink">
@@ -143,15 +210,7 @@ function MessageItemInner({
         )}
         {footer}
       </div>
-
-      {!deleted && !editing && !m.pending && (
-        <div className="absolute -top-3 right-5 z-10 hidden items-center gap-0.5 rounded-lg border border-line bg-surface p-0.5 shadow-panel group-hover:flex group-focus-within:flex">
-          {m.body && <button className={actionBtn} onClick={onCopy} title="Copy text" aria-label="Copy text"><Copy size={15} /></button>}
-          {mine && Boolean(m.body) && <button className={actionBtn} onClick={onStartEdit} title="Edit" aria-label="Edit message"><Pencil size={15} /></button>}
-          {mine && <button className={cx(actionBtn, 'hover:text-danger')} onClick={onDelete} title="Delete" aria-label="Delete message"><Trash2 size={15} /></button>}
-          {!mine && sender && <button className={cx(actionBtn, 'hover:text-danger')} onClick={onReport} title="Report" aria-label="Report message"><Flag size={15} /></button>}
-        </div>
-      )}
+      {actions}
     </div>
   );
 }

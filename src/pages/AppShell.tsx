@@ -14,6 +14,7 @@ import { errorMessage, supabase } from '../lib/supabase';
 import type { ConversationSummary, Profile, Status } from '../lib/types';
 import { Avatar, IconButton, Logo, Menu, PresenceDot, SectionLabel, cx } from '../components/ui';
 import { NewChatDialog, NewGroupDialog } from '../components/NewConversationDialogs';
+import { useLayout } from '../lib/layout';
 import { ChooseNameDialog } from '../components/ChooseNameDialog';
 
 interface ShellApi {
@@ -312,6 +313,9 @@ function Sidebar() {
 
 function ConversationItem({ c }: { c: ConversationSummary }) {
   const { userId } = useMe();
+  const layout = useLayout();
+  const compact = layout.density === 'compact';
+  const avatarSize = compact ? 28 : 34;
   const { presenceOf } = usePresence();
   const location = useLocation();
   const active = location.pathname === `/c/${c.id}`;
@@ -337,14 +341,15 @@ function ConversationItem({ c }: { c: ConversationSummary }) {
     <Link
       to={`/c/${c.id}`}
       className={cx(
-        'mx-2 flex items-center gap-3 rounded-full py-1.5 pl-3 pr-4',
+        'mx-2 flex items-center gap-3 rounded-full pl-3 pr-4',
+        compact ? 'py-1' : 'py-1.5',
         active ? 'bg-accent-soft' : 'hover:bg-surface-3/60',
       )}
     >
       {c.type === 'direct' ? (
-        <Avatar src={c.other_avatar_url} name={c.other_display_name} seed={c.other_user_id ?? c.id} size={34} presence={c.other_user_id ? presenceOf(c.other_user_id, c.other_status) : undefined} />
+        <Avatar src={c.other_avatar_url} name={c.other_display_name} seed={c.other_user_id ?? c.id} size={avatarSize} presence={c.other_user_id ? presenceOf(c.other_user_id, c.other_status) : undefined} />
       ) : (
-        <Avatar src={c.avatar_url} name={c.name} seed={c.id} size={34} square />
+        <Avatar src={c.avatar_url} name={c.name} seed={c.id} size={avatarSize} square />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
@@ -355,8 +360,9 @@ function ConversationItem({ c }: { c: ConversationSummary }) {
             {formatListTime(c.last_message_at)}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={cx('flex-1 truncate text-[13px]', unread ? 'font-medium text-ink' : 'text-muted')}>{preview}</span>
+        <div className={cx('flex items-center gap-2', !layout.previews && '-mt-0.5')}>
+          <span className={cx('flex-1 truncate text-[13px]', unread ? 'font-medium text-ink' : 'text-muted', !layout.previews && 'sr-only')}>{preview}</span>
+          {!layout.previews && <span className="flex-1" />}
           {c.muted && <BellOff size={13} className="shrink-0 text-subtle" />}
           {unread && !c.muted && (
             <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-on-accent">

@@ -15,6 +15,7 @@ import { errorMessage, supabase } from '../lib/supabase';
 import type { Conversation, Member, Message } from '../lib/types';
 import { Avatar, Button, EmptyState, IconButton, Spinner } from '../components/ui';
 import { MessageItem } from '../components/chat/MessageItem';
+import { useLayout } from '../lib/layout';
 import { Composer } from '../components/chat/Composer';
 import { DetailsPanel } from '../components/chat/DetailsPanel';
 import { ConfirmDialog, ReportDialog } from '../components/Dialogs';
@@ -30,6 +31,7 @@ function ChatRoom() {
   const { id = '' } = useParams();
   const { userId, profile: me } = useMe();
   const { settings } = useAuth();
+  const layout = useLayout();
   const { conversations, setActiveConversation, markReadLocally, refresh: refreshList, relock } = useChats();
   const { presenceOf } = usePresence();
   const toast = useToast();
@@ -402,6 +404,9 @@ function ChatRoom() {
                 const compact = !newDay && !!prev && prev.sender_id === m.sender_id && !prev.deleted_at
                   && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60 * 1000;
                 const sender = m.sender_id ? memberMap.get(m.sender_id)?.profile ?? (m.sender_id === userId ? me : undefined) : undefined;
+                const next = messages[i + 1];
+                const nextSame = !!next && next.sender_id === m.sender_id && !next.deleted_at && sameDay(next.created_at, m.created_at)
+                  && new Date(next.created_at).getTime() - new Date(m.created_at).getTime() < 5 * 60 * 1000;
                 return (
                   <div key={m.id}>
                     {newDay && (
@@ -425,6 +430,10 @@ function ChatRoom() {
                       onReport={() => setReporting(m)}
                       onCopy={() => navigator.clipboard?.writeText(m.body).then(() => toast('Copied'))}
                       onOpenImage={(src) => setLightbox({ srcs: [src], index: 0 })}
+                      bubbles={layout.messageStyle === 'bubbles'}
+                      dense={layout.density === 'compact'}
+                      nextSame={nextSame}
+                      showName={conv?.type === 'group'}
                       footer={
                         receipt?.messageId === m.id ? (
                           <div className="mt-0.5 text-right text-[11px] text-subtle">{receipt.label}</div>
