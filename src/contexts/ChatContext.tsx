@@ -102,7 +102,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const sender = m.sender_id ? await getProfile(m.sender_id) : null;
         const title = conv?.type === 'group' ? `${sender?.display_name ?? 'Someone'} in ${conv.name}` : sender?.display_name ?? APP_NAME;
         const n = new Notification(conv?.locked ? 'Sauchatz' : title, {
-          body: conv?.locked ? 'New message in a locked chat' : m.deleted_at ? '' : m.body || 'Sent a photo',
+          body: conv?.locked ? 'New message in a locked chat' : m.deleted_at ? '' : m.body || (m.gif_url ? 'Sent a GIF' : 'Sent a photo'),
           icon: sender?.avatar_url || `${import.meta.env.BASE_URL}favicon.svg`,
           tag: m.conversation_id,
         });

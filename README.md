@@ -57,6 +57,10 @@ Every push to GitHub redeploys the site automatically. Page links such as `/u/12
 
 GitHub Pages alternative: run `npm run build:pages`, which builds for `a0per.github.io/sauchatz/`.
 
+## GIFs (optional)
+
+GIF search uses GIPHY. Get a free API key at developers.giphy.com (Create an App, choose API), then add it to your hosting settings as `VITE_GIPHY_KEY` and redeploy. Without a key the GIF button is hidden; people can still upload GIF files as photos.
+
 ## Changing things
 
 - **Name of the site:** `src/config.ts` (`APP_NAME`) and the `<title>` in `index.html`.

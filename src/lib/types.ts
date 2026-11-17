@@ -13,6 +13,7 @@ export interface Profile {
   show_read_receipts: boolean;
   is_public: boolean;
   is_test?: boolean;
+  show_hearts?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +115,9 @@ export interface Message {
   sender_id: string | null;
   body: string;
   image_path: string | null;
+  gif_url?: string | null;
+  /** Group private photo: only this member (and the sender) can see it. */
+  recipient_id?: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
@@ -121,4 +125,12 @@ export interface Message {
   pending?: boolean;
   /** Client only: local preview for an image that is uploading. */
   localImage?: string;
+}
+
+export interface Reaction {
+  message_id: string;
+  conversation_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
 }

@@ -11,6 +11,8 @@ export interface Layout {
   density: Density;
   messageStyle: MessageStyle;
   previews: boolean;
+  /** Chat background: 'none', a preset id like 'preset:dawn', or an image URL. */
+  background: string;
 }
 
 export const DEFAULT_LAYOUT: Layout = {
@@ -19,7 +21,28 @@ export const DEFAULT_LAYOUT: Layout = {
   density: 'comfortable',
   messageStyle: 'classic',
   previews: true,
+  background: 'none',
 };
+
+export const BACKGROUND_PRESETS: { id: string; label: string; light: string; dark: string }[] = [
+  { id: 'dawn', label: 'Dawn', light: 'linear-gradient(160deg, #fde7d9 0%, #f3e3f7 55%, #e2e9fb 100%)', dark: 'linear-gradient(160deg, #2a1f26 0%, #241f33 55%, #1b2233 100%)' },
+  { id: 'ocean', label: 'Ocean', light: 'linear-gradient(180deg, #e3f0fb 0%, #d7ecf2 100%)', dark: 'linear-gradient(180deg, #13212e 0%, #102428 100%)' },
+  { id: 'mint', label: 'Mint', light: 'linear-gradient(160deg, #e6f6ee 0%, #f2f8e6 100%)', dark: 'linear-gradient(160deg, #13261d 0%, #1d2414 100%)' },
+  { id: 'dots', label: 'Dots', light: 'radial-gradient(#d6dbe3 1.2px, transparent 1.2px) 0 0 / 18px 18px, #f7f8fa', dark: 'radial-gradient(#2c313a 1.2px, transparent 1.2px) 0 0 / 18px 18px, #15181d' },
+  { id: 'grid', label: 'Grid', light: 'linear-gradient(#e7eaef 1px, transparent 1px) 0 0 / 22px 22px, linear-gradient(90deg, #e7eaef 1px, transparent 1px) 0 0 / 22px 22px, #fafbfc', dark: 'linear-gradient(#22262d 1px, transparent 1px) 0 0 / 22px 22px, linear-gradient(90deg, #22262d 1px, transparent 1px) 0 0 / 22px 22px, #14171b' },
+];
+
+/** CSS background for the chat area, or undefined for none. */
+export function chatBackgroundCss(bg: string, dark: boolean): string | undefined {
+  if (!bg || bg === 'none') return undefined;
+  if (bg.startsWith('preset:')) {
+    const p = BACKGROUND_PRESETS.find((x) => x.id === bg.slice(7));
+    return p ? (dark ? p.dark : p.light) : undefined;
+  }
+  if (!/^https:\/\//.test(bg)) return undefined;
+  const veil = dark ? 'rgb(15 17 21 / 0.72)' : 'rgb(255 255 255 / 0.62)';
+  return `linear-gradient(${veil}, ${veil}), url("${bg.replace(/"/g, '')}") center / cover no-repeat`;
+}
 
 type Palette = { accent: string; hover: string; soft: string; onSoft: string; on: string };
 
@@ -67,6 +90,7 @@ export function readLayout(raw: unknown): Layout {
     density: v.density === 'compact' ? 'compact' : 'comfortable',
     messageStyle: v.messageStyle === 'bubbles' ? 'bubbles' : 'classic',
     previews: v.previews !== false,
+    background: typeof v.background === 'string' ? v.background : 'none',
   };
 }
 

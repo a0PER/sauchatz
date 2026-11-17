@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, SendHorizontal, Smile, X } from 'lucide-react';
+import { ImagePlus, Lock, SendHorizontal, Smile, X } from 'lucide-react';
+import { GifPicker, gifsEnabled } from './GifPicker';
 import { EmojiPicker } from './EmojiPicker';
 import { MAX_MESSAGE_LENGTH } from '../../config';
 import { useToast } from '../../contexts/ToastContext';
@@ -7,11 +8,14 @@ import { ACCEPT_ATTR, validateImage } from '../../lib/images';
 import { IconButton, cx } from '../ui';
 
 export function Composer({
-  placeholder, enterToSend, onSend, onTyping, droppedFile, onDroppedFileUsed,
+  placeholder, enterToSend, onSend, onTyping, droppedFile, onDroppedFileUsed, onSendGif, members,
 }: {
   placeholder: string;
   enterToSend: boolean;
-  onSend: (body: string, file: File | null) => void;
+  onSend: (body: string, file: File | null, privateTo: string | null) => void;
+  onSendGif: (url: string) => void;
+  /** Other group members, so a photo can be sent privately to one of them. */
+  members?: { id: string; name: string }[];
   onTyping: () => void;
   droppedFile: File | null;
   onDroppedFileUsed: () => void;
@@ -21,6 +25,8 @@ export function Composer({
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
+  const [privateTo, setPrivateTo] = useState<string>('');
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -59,7 +65,8 @@ export function Composer({
     const body = text.trim();
     if (!body && !file) return;
     if (body.length > MAX_MESSAGE_LENGTH) return toast(`Messages can be up to ${MAX_MESSAGE_LENGTH} characters.`, 'error');
-    onSend(body, file);
+    onSend(body, file, file && privateTo ? privateTo : null);
+    setPrivateTo('');
     setText('');
     setFile(null);
     area.current?.focus();
@@ -100,6 +107,21 @@ export function Composer({
             </div>
           </div>
         )}
+        {file && members && members.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 pt-2 text-[13px] text-muted">
+            <Lock size={14} className={privateTo ? 'text-accent' : ''} />
+            <span>Who can see this photo:</span>
+            <select
+              value={privateTo}
+              onChange={(e) => setPrivateTo(e.target.value)}
+              className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-[13px] text-ink outline-none focus:border-accent"
+              aria-label="Who can see this photo"
+            >
+              <option value="">Everyone in the group</option>
+              {members.map((m) => <option key={m.id} value={m.id}>Only {m.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="relative flex items-end gap-0.5 px-1.5 py-1.5">
           <IconButton label="Add a photo" size={38} onClick={() => picker.current?.click()}>
             <ImagePlus size={20} />
@@ -108,6 +130,19 @@ export function Composer({
             <Smile size={20} />
           </IconButton>
           {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+          {gifsEnabled && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setGifOpen((o) => !o)}
+              aria-label="Send a GIF"
+              title="Send a GIF"
+              className={`inline-flex h-[38px] shrink-0 items-center justify-center rounded-full px-2 text-[11px] font-bold tracking-wide ${gifOpen ? 'bg-accent-soft text-on-accent-soft' : 'text-muted hover:bg-surface-2 hover:text-ink'}`}
+            >
+              <span className="rounded border-[1.5px] border-current px-1 py-px leading-none">GIF</span>
+            </button>
+          )}
+          {gifOpen && <GifPicker onPick={(url) => { setGifOpen(false); onSendGif(url); }} onClose={() => setGifOpen(false)} />}
           <input
             ref={picker}
             type="file"

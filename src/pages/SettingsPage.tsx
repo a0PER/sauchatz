@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Bell, Check, ChevronRight, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
-import { ACCENTS, readLayout, type Accent, type Density, type Layout, type MessageStyle, type TextSize } from '../lib/layout';
+import { ArrowLeft, Bell, Check, ChevronRight, ImagePlus, Lock, Monitor, Moon, Palette, Shield, Sun, User } from 'lucide-react';
+import { ACCENTS, BACKGROUND_PRESETS, chatBackgroundCss, readLayout, type Accent, type Density, type Layout, type MessageStyle, type TextSize } from '../lib/layout';
+import { ACCEPT_ATTR, mediaPathFromUrl, removeMedia, uploadMedia, validateImage } from '../lib/images';
 import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -375,6 +376,13 @@ function PrivacySection() {
           control={<Toggle checked={profile.is_public} onChange={(v) => set({ is_public: v })} label="Public profile" />}
         />
       </Card>
+      <Card title="Hearts">
+        <Row
+          title="Show my heart count"
+          description="Show how many hearts you have received in the top right of your profile. When this is off, only you can see the number."
+          control={<Toggle checked={profile.show_hearts !== false} onChange={(v) => set({ show_hearts: v })} label="Show my heart count" />}
+        />
+      </Card>
       <ChatPinCard />
       <Card title="Who can message you" description="People already in a conversation with you can always reply.">
         <RadioCards
@@ -474,6 +482,8 @@ function AppearanceSection() {
         </div>
       </Card>
 
+      <ChatBackgroundCard layout={layout} setLayout={setLayout} />
+
       <Card title="Layout">
         <div className="space-y-5">
           <div>
@@ -557,5 +567,64 @@ function AppearanceSection() {
         />
       </Card>
     </>
+  );
+}
+
+function ChatBackgroundCard({ layout, setLayout }: { layout: Layout; setLayout: (patch: Partial<Layout>) => void }) {
+  const { userId } = useMe();
+  const toast = useToast();
+  const picker = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const dark = document.documentElement.classList.contains('dark');
+  const custom = layout.background.startsWith('https://') ? layout.background : null;
+
+  function choose(bg: string) {
+    const old = mediaPathFromUrl(custom);
+    if (old && bg !== custom) removeMedia(old);
+    setLayout({ background: bg });
+  }
+
+  async function upload(f: File | undefined) {
+    if (!f) return;
+    const problem = validateImage(f);
+    if (problem) return toast(problem, 'error');
+    setUploading(true);
+    try {
+      const { url } = await uploadMedia(`users/${userId}/background`, f, 1920);
+      choose(url);
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const tile = (on: boolean) => cx(
+    'relative flex aspect-[4/3] items-end overflow-hidden rounded-xl border-2 p-2 text-left text-xs font-medium transition-colors',
+    on ? 'border-accent' : 'border-line hover:border-line-strong',
+  );
+
+  return (
+    <Card title="Chat background" description="Shown behind your messages. Only you see your background.">
+      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+        <button onClick={() => choose('none')} className={cx(tile(layout.background === 'none'), 'bg-surface')}>
+          <span className="rounded bg-surface/85 px-1.5 py-0.5 text-ink">None</span>
+        </button>
+        {BACKGROUND_PRESETS.map((p) => (
+          <button key={p.id} onClick={() => choose(`preset:${p.id}`)} className={tile(layout.background === `preset:${p.id}`)} style={{ background: dark ? p.dark : p.light }}>
+            <span className="rounded bg-surface/85 px-1.5 py-0.5 text-ink">{p.label}</span>
+          </button>
+        ))}
+        {custom && (
+          <button onClick={() => choose(custom)} className={tile(true)} style={{ background: chatBackgroundCss(custom, dark) }}>
+            <span className="rounded bg-surface/85 px-1.5 py-0.5 text-ink">Your photo</span>
+          </button>
+        )}
+        <button onClick={() => picker.current?.click()} className={cx(tile(false), 'flex-col items-center justify-center gap-1 border-dashed text-muted hover:text-accent')}>
+          {uploading ? <Spinner /> : <><ImagePlus size={20} /><span>{custom ? 'Change photo' : 'Upload photo'}</span></>}
+        </button>
+      </div>
+      <input ref={picker} type="file" accept={ACCEPT_ATTR} hidden onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
+    </Card>
   );
 }

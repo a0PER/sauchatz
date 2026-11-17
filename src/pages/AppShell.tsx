@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import {
-  BellOff, ChevronDown, Image as ImageIcon, Lock, LogOut, ShieldCheck, MessageSquarePlus, Plus, Search, Settings, SquarePen,
-  User, Users, UsersRound, X,
+  BellOff, ChevronDown, Compass, Image as ImageIcon, Lock, LogOut, ShieldCheck, MessageSquarePlus, Plus, Search, Settings, SquarePen,
+  User, UsersRound, X,
 } from 'lucide-react';
 import { APP_NAME } from '../config';
 import { useAuth, useMe } from '../contexts/AuthContext';
@@ -268,14 +268,14 @@ function Sidebar() {
           items={[
             { label: 'Message someone', icon: <MessageSquarePlus size={17} />, onSelect: openNewChat },
             { label: 'Create a group', icon: <UsersRound size={17} />, onSelect: openNewGroup },
-            { label: 'Browse people', icon: <Users size={17} />, onSelect: () => navigate('/people') },
+            { label: 'Explore', icon: <Compass size={17} />, onSelect: () => navigate('/explore') },
           ]}
         />
       </div>
 
       <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto pb-4">
         <NavLink
-          to="/people"
+          to="/explore"
           className={({ isActive }) =>
             cx(
               'mx-2 mt-1 flex h-10 items-center gap-3 rounded-full px-4 text-sm',
@@ -283,8 +283,8 @@ function Sidebar() {
             )
           }
         >
-          <Users size={18} />
-          People
+          <Compass size={18} />
+          Explore
         </NavLink>
 
         <SectionLabel action={<IconButton label="Message someone" size={28} onClick={openNewChat}><Plus size={17} /></IconButton>}>

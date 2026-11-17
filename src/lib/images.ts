@@ -64,9 +64,10 @@ export function mediaPathFromUrl(url: string | null | undefined) {
 }
 
 /** Uploads a picture sent in a chat to the private "chat-images" bucket. */
-export async function uploadChatImage(conversationId: string, file: File) {
+export async function uploadChatImage(conversationId: string, file: File, privateTo?: { recipient: string; sender: string }) {
   const blob = await compressImage(file, 2000);
-  const path = `${conversationId}/${crypto.randomUUID()}.${extensionFor(blob)}`;
+  const folder = privateTo ? `${conversationId}/private/${privateTo.recipient}/${privateTo.sender}` : conversationId;
+  const path = `${folder}/${crypto.randomUUID()}.${extensionFor(blob)}`;
   const { error } = await supabase.storage.from('chat-images').upload(path, blob, {
     contentType: blob.type || file.type,
   });

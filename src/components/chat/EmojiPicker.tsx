@@ -108,7 +108,7 @@ export function isEmojiOnly(text: string) {
   return count >= 1 && count <= 3;
 }
 
-export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+export function EmojiPicker({ onPick, onClose, align = 'left' }: { onPick: (emoji: string) => void; onClose: () => void; align?: 'left' | 'right' }) {
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [active, setActive] = useState(recent.length ? 'recent' : 'smileys');
@@ -149,7 +149,7 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
       ref={root}
       role="dialog"
       aria-label="Emoji picker"
-      className="animate-in absolute bottom-full left-0 z-40 mb-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-panel"
+      className={cx('animate-in absolute bottom-full z-40 mb-2 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-panel', align === 'right' ? 'right-0' : 'left-0')}
     >
       <div className="p-2.5 pb-1.5">
         <div className="flex h-9 items-center gap-2 rounded-lg bg-surface-2 px-2.5">

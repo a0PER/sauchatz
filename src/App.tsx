@@ -83,7 +83,8 @@ function Gate() {
           <Route element={<AppShell />}>
             <Route index element={<HomePage />} />
             <Route path="c/:id" element={<ChatPage />} />
-            <Route path="people" element={<PeoplePage />} />
+            <Route path="explore" element={<PeoplePage />} />
+            <Route path="people" element={<Navigate to="/explore" replace />} />
             <Route path="u/:id" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile/edit" element={<EditProfilePage />} />

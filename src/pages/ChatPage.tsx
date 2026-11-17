@@ -12,10 +12,10 @@ import { formatDayDivider, plural, sameDay, statusLabel } from '../lib/format';
 import { uploadChatImage } from '../lib/images';
 import { cacheProfile } from '../lib/profileCache';
 import { errorMessage, supabase } from '../lib/supabase';
-import type { Conversation, Member, Message } from '../lib/types';
+import type { Conversation, Member, Message, Reaction } from '../lib/types';
 import { Avatar, Button, EmptyState, IconButton, Spinner } from '../components/ui';
-import { MessageItem } from '../components/chat/MessageItem';
-import { useLayout } from '../lib/layout';
+import { MessageItem, type ReactionSummary } from '../components/chat/MessageItem';
+import { chatBackgroundCss, useLayout } from '../lib/layout';
 import { Composer } from '../components/chat/Composer';
 import { DetailsPanel } from '../components/chat/DetailsPanel';
 import { ConfirmDialog, ReportDialog } from '../components/Dialogs';
@@ -62,6 +62,44 @@ function ChatRoom() {
   const lastTypingSent = useRef(0);
 
   const memberMap = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const reactionMap = useMemo(() => {
+    const map = new Map<string, ReactionSummary[]>();
+    const byMsg = new Map<string, Reaction[]>();
+    reactions.forEach((r) => byMsg.set(r.message_id, [...(byMsg.get(r.message_id) ?? []), r]));
+    byMsg.forEach((list, msgId) => {
+      const groups = new Map<string, Reaction[]>();
+      list.forEach((r) => groups.set(r.emoji, [...(groups.get(r.emoji) ?? []), r]));
+      map.set(msgId, [...groups.entries()].map(([emoji, rs]) => ({
+        emoji,
+        count: rs.length,
+        mine: rs.some((r) => r.user_id === userId),
+        names: rs.map((r) => (r.user_id === userId ? 'You' : memberMap.get(r.user_id)?.profile?.display_name ?? 'Someone')),
+      })));
+    });
+    return map;
+  }, [reactions, memberMap, userId]);
+
+  useEffect(() => {
+    setReactions([]);
+    supabase.from('message_reactions').select('*').eq('conversation_id', id).then(({ data }) => setReactions((data as Reaction[]) ?? []));
+  }, [id]);
+
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    const mine = reactions.find((r) => r.message_id === messageId && r.user_id === userId && r.emoji === emoji);
+    if (mine) {
+      setReactions((list) => list.filter((r) => r !== mine));
+      await supabase.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', userId).eq('emoji', emoji);
+    } else {
+      const row: Reaction = { message_id: messageId, conversation_id: id, user_id: userId, emoji, created_at: new Date().toISOString() };
+      setReactions((list) => [...list, row]);
+      const { error } = await supabase.from('message_reactions').insert({ message_id: messageId, conversation_id: id, emoji });
+      if (error) {
+        setReactions((list) => list.filter((r) => r !== row));
+        toast(errorMessage(error), 'error');
+      }
+    }
+  }, [reactions, userId, id, toast]);
   const other = conv?.type === 'direct' ? members.find((m) => m.user_id !== userId) : undefined;
   const summary = conversations.find((c) => c.id === id);
   const title = conv?.type === 'group' ? conv.name ?? 'Group' : other?.profile?.display_name ?? summary?.other_display_name ?? 'Deleted user';
@@ -155,6 +193,15 @@ function ChatRoom() {
         if ((p.old as Partial<Member>).conversation_id === id) loadMembers();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter: `id=eq.${id}` }, (p) => setConv(p.new as Conversation))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `conversation_id=eq.${id}` }, (p) => {
+        const r = p.new as Reaction;
+        setReactions((list) => (list.some((x) => x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji) ? list : [...list, r]));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, (p) => {
+        const r = p.old as Partial<Reaction>;
+        if (r.conversation_id !== id) return;
+        setReactions((list) => list.filter((x) => !(x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji)));
+      })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         if (payload.user_id === userId) return;
         setTyping((t) => ({ ...t, [payload.user_id]: { name: payload.name, until: Date.now() + 4000 } }));
@@ -240,20 +287,20 @@ function ChatRoom() {
 
   /* ---------- Actions ---------- */
 
-  async function send(body: string, file: File | null) {
+  async function send(body: string, file: File | null, privateTo: string | null = null, gifUrl: string | null = null) {
     const msgId = crypto.randomUUID();
     const temp: Message = {
-      id: msgId, conversation_id: id, sender_id: userId, body, image_path: null,
+      id: msgId, conversation_id: id, sender_id: userId, body, image_path: null, gif_url: gifUrl, recipient_id: privateTo,
       created_at: new Date().toISOString(), edited_at: null, deleted_at: null,
       pending: true, localImage: file ? URL.createObjectURL(file) : undefined,
     };
     stickToBottom.current = true;
     setMessages((list) => [...list, temp]);
     try {
-      const image_path = file ? await uploadChatImage(id, file) : null;
+      const image_path = file ? await uploadChatImage(id, file, privateTo ? { recipient: privateTo, sender: userId } : undefined) : null;
       const { data, error } = await supabase
         .from('messages')
-        .insert({ id: msgId, conversation_id: id, sender_id: userId, body, image_path })
+        .insert({ id: msgId, conversation_id: id, sender_id: userId, body, image_path, gif_url: gifUrl, recipient_id: privateTo })
         .select()
         .single();
       if (error) throw error;
@@ -391,7 +438,12 @@ function ChatRoom() {
         </header>
 
         {/* Messages */}
-        <div ref={scroller} onScroll={onScroll} className="scroll-thin min-h-0 flex-1 overflow-y-auto pb-3">
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          className="scroll-thin min-h-0 flex-1 overflow-y-auto pb-3"
+          style={{ background: chatBackgroundCss(layout.background, document.documentElement.classList.contains('dark')) }}
+        >
           {state === 'loading' ? (
             <div className="flex h-full items-center justify-center"><Spinner size={24} /></div>
           ) : (
@@ -430,6 +482,9 @@ function ChatRoom() {
                       onReport={() => setReporting(m)}
                       onCopy={() => navigator.clipboard?.writeText(m.body).then(() => toast('Copied'))}
                       onOpenImage={(src) => setLightbox({ srcs: [src], index: 0 })}
+                      reactions={reactionMap.get(m.id)}
+                      onReact={m.pending ? undefined : (emoji) => toggleReaction(m.id, emoji)}
+                      privateLabel={m.recipient_id ? (m.sender_id === userId ? `Only ${memberMap.get(m.recipient_id)?.profile?.display_name?.split(' ')[0] ?? 'one person'} can see this` : 'Private photo, sent only to you') : undefined}
                       bubbles={layout.messageStyle === 'bubbles'}
                       dense={layout.density === 'compact'}
                       nextSame={nextSame}
@@ -481,6 +536,8 @@ function ChatRoom() {
             onTyping={sendTyping}
             droppedFile={droppedFile}
             onDroppedFileUsed={() => setDroppedFile(null)}
+            onSendGif={(url) => send('', null, null, url)}
+            members={conv?.type === 'group' ? members.filter((m) => m.user_id !== userId && m.profile).map((m) => ({ id: m.user_id, name: m.profile!.display_name })) : undefined}
           />
         )}
 

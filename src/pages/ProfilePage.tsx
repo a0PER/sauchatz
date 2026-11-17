@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Ban, BookOpen, Flag, GraduationCap, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
+  ArrowLeft, Ban, BookOpen, Flag, GraduationCap, Heart, Lock, MapPin, MessageSquare, MoreHorizontal, Pencil, Sparkles, UserX,
 } from 'lucide-react';
 import { useMe } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
@@ -67,6 +67,9 @@ export default function ProfilePage() {
   const [viewer, setViewer] = useState<number | null>(null);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [hearts, setHearts] = useState<number | null>(null);
+  const [hearted, setHearted] = useState(false);
+  const [heartBusy, setHeartBusy] = useState(false);
 
   const load = useCallback(async () => {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
@@ -92,6 +95,12 @@ export default function ProfilePage() {
     }
     setPhotos((ph as ProfilePhoto[] | null) ?? []);
     setBlocked(Boolean(b));
+    const [{ data: hc }, { data: mine }] = await Promise.all([
+      supabase.rpc('heart_count', { p_user: id }),
+      isMe ? Promise.resolve({ data: null }) : supabase.from('profile_hearts').select('to_user').eq('to_user', id).maybeSingle(),
+    ]);
+    setHearts(typeof hc === 'number' ? hc : null);
+    setHearted(Boolean(mine));
     setState('ready');
   }, [id, isMe]);
 
@@ -107,6 +116,23 @@ export default function ProfilePage() {
     setOpening(false);
     if (error) return toast(errorMessage(error), 'error');
     navigate(`/c/${data}`);
+  }
+
+  async function toggleHeart() {
+    setHeartBusy(true);
+    const next = !hearted;
+    setHearted(next);
+    setHearts((n) => (n === null ? n : n + (next ? 1 : -1)));
+    const { error } = next
+      ? await supabase.from('profile_hearts').insert({ to_user: id })
+      : await supabase.from('profile_hearts').delete().eq('to_user', id);
+    setHeartBusy(false);
+    if (error) {
+      setHearted(!next);
+      setHearts((n) => (n === null ? n : n + (next ? -1 : 1)));
+      return toast(errorMessage(error), 'error');
+    }
+    if (next) toast(`You sent ${profile?.display_name.split(' ')[0]} a heart`, 'success');
   }
 
   async function block() {
@@ -149,7 +175,18 @@ export default function ProfilePage() {
       ) : blocked ? (
         <Button variant="secondary" icon={<Ban size={16} />} onClick={unblock}>Unblock</Button>
       ) : (
-        <Button icon={<MessageSquare size={16} />} loading={opening} onClick={message}>Message {firstName}</Button>
+        <>
+          <Button icon={<MessageSquare size={16} />} loading={opening} onClick={message}>Message {firstName}</Button>
+          <Button
+            variant={hearted ? 'tonal' : 'secondary'}
+            icon={<Heart size={16} className={hearted ? 'fill-current text-danger' : ''} />}
+            onClick={toggleHeart}
+            disabled={heartBusy}
+            aria-pressed={hearted}
+          >
+            {hearted ? 'Heart sent' : 'Send a heart'}
+          </Button>
+        </>
       )}
       {!isMe && (
         <Menu
@@ -230,6 +267,13 @@ export default function ProfilePage() {
             ) : (
               <div className="flex aspect-[4/5] w-full items-center justify-center">
                 <Avatar name={profile.display_name} seed={profile.id} size={160} />
+              </div>
+            )}
+            {hearts !== null && (
+              <div className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-black/45 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-md" title={`${hearts} ${hearts === 1 ? 'heart' : 'hearts'}`}>
+                <Heart size={15} className="fill-current text-[#ff6b8b]" />
+                {hearts}
+                {isMe && profile.show_hearts === false && <span className="font-normal text-white/75">· hidden</span>}
               </div>
             )}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-6 pb-6 pt-24 text-white">
